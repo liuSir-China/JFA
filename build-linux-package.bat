@@ -63,7 +63,9 @@ if not exist "%PROJECT%\scripts\jfa-launcher.sh" (
   echo [ERROR] missing scripts\jfa-launcher.sh
   goto :FAIL
 )
-copy /y "%PROJECT%\scripts\jfa-launcher.sh" "%DEST%\bin\jfa" >nul
+REM Write launcher with Unix LF endings (avoid bash\r on Linux).
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$src='%PROJECT%\scripts\jfa-launcher.sh'; $dst='%DEST%\bin\jfa'; $t=[IO.File]::ReadAllText($src) -replace [char]13+[char]10,[char]10 -replace [char]13,[char]10; if(-not $t.EndsWith([string][char]10)){$t+=[char]10}; [IO.File]::WriteAllBytes($dst,[Text.UTF8Encoding]::new($false).GetBytes($t))"
+if errorlevel 1 (echo [ERROR] write bin\jfa failed & goto :FAIL)
 
 echo [3/4] Create %TAR_NAME% ...
 pushd "%PROJECT%\dist"
