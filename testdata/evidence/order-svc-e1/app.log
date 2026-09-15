@@ -1,0 +1,6 @@
+2026-09-15T02:55:12.100+0000 ERROR com.example.biz.OrderService - query failed
+java.lang.OutOfMemoryError: Java heap space
+	at com.example.cache.OrderCache.put(OrderCache.java:44)
+	at com.example.biz.OrderService.query(OrderService.java:91)
+	at com.example.web.OrderController.get(OrderController.java:30)
+	at sun.reflect.GeneratedMethodAccessor12.invoke(Unknown Source)

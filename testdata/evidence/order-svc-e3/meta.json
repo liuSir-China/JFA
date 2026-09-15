@@ -1,0 +1,19 @@
+{
+  "service_id": "order-svc",
+  "display_name": "订单服务",
+  "created_at": "2026-09-15T01:00:00Z",
+  "updated_at": "2026-09-15T01:00:00Z",
+  "match": {
+    "main_class_contains": "com.example.OrderApp",
+    "last_pid": 22401
+  },
+  "paths": {
+    "evidence_dir": "testdata/evidence/order-svc-e3",
+    "app_log": "testdata/evidence/order-svc-e3/app.log",
+    "gc_log_glob": "testdata/evidence/order-svc-e3/gc/*.log",
+    "hprof_glob": "testdata/evidence/order-svc-e3/heap/*.hprof"
+  },
+  "java_home": "/usr/lib/jvm/java-8-openjdk",
+  "lifecycle_managed_by_jfa": false,
+  "notes": "主路径登记；lifecycle_managed_by_jfa 必须可为 false"
+}
