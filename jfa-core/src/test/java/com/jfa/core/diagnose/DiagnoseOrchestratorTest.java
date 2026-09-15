@@ -130,6 +130,8 @@ public class DiagnoseOrchestratorTest {
         Assert.assertTrue(r.getTextFile().getName().endsWith(".md"));
         Assert.assertTrue(r.getText().contains("健康体检"));
     }
+
+    private DiagnoseResult run(File evidenceDir, AnalysisMode mode, File hprof, File gc, File td) {
         DiagnoseRequest req = base(evidenceDir);
         req.setMode(mode);
         req.setHprof(hprof);
