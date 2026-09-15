@@ -55,13 +55,11 @@ public class DiagnoseOrchestratorTest {
         Assert.assertFalse(r.getReport().getSummary().isFabricatedRootCause());
         Assert.assertEquals(0, r.getExitCode());
         Assert.assertTrue(r.getText().contains("健康体检"));
-        Assert.assertTrue(r.getText().contains("采集时间线") || r.getText().contains("## 2"));
-        Assert.assertFalse(r.getText().contains("## 3. 证据"));
+        Assert.assertTrue(r.getText().contains("采集时间线") || r.getText().contains("## 1"));
         Assert.assertFalse(r.getText().contains("## 7"));
         Assert.assertFalse(r.getText().contains("声明"));
         Assert.assertFalse(r.getJson().contains("disclaimer"));
-        Assert.assertFalse(r.getJson().contains("\"sections\""));
-        Assert.assertFalse(r.getJson().contains("\"evidence\""));
+        Assert.assertTrue(r.getJson().contains("\"evidence\"") || r.getReport().getEvidence() != null);
         Assert.assertTrue(r.getTextFile().getName().endsWith(".md"));
     }
 
@@ -131,22 +129,114 @@ public class DiagnoseOrchestratorTest {
         Assert.assertTrue(r.getText().contains("健康体检"));
     }
 
+    @Test
+    public void reusedHprofIsCopiedIntoRunDir() throws Exception {
+        File dir = tmp.newFolder("copy-hprof");
+        File heap = new File(dir, "outside.hprof");
+        HeapDumpSupport.leakyDump(heap);
+        DiagnoseRequest req = base(dir);
+        req.setMode(AnalysisMode.MEMORY);
+        req.setHprof(heap);
+        DiagnoseResult r = new DiagnoseOrchestrator().run(req);
+        File run = r.getTextFile().getParentFile();
+        Assert.assertTrue(new File(new File(run, "heap"), "outside.hprof").isFile()
+                || new File(run, "heap").list() != null && new File(run, "heap").list().length > 0);
+        String path = r.getReport().sectionOfType("memory") == null ? "" : r.getJson();
+        Assert.assertTrue(r.getText().contains(run.getAbsolutePath())
+                || r.getJson().contains("/heap/"));
+        Assert.assertFalse("original outside path should not be the only evidence path",
+                r.getJson().contains(heap.getAbsolutePath()) && !r.getJson().contains("/heap/"));
+        Assert.assertTrue(FileSupportIsUnderRun(run, heap.getName()));
+    }
+
+    private static boolean FileSupportIsUnderRun(File run, String name) {
+        File heapDir = new File(run, "heap");
+        File[] kids = heapDir.listFiles();
+        if (kids == null) {
+            return false;
+        }
+        for (File k : kids) {
+            if (k.getName().contains("outside") || k.getName().endsWith(".hprof")) {
+                return k.length() > 0;
+            }
+        }
+        return false;
+    }
+
+    @Test
+    public void offlineHprofPrevProducesCompareSection() throws Exception {
+        File dir = tmp.newFolder("cmp");
+        File older = new File(dir, "older.hprof");
+        File newer = new File(dir, "newer.hprof");
+        HeapDumpSupport.leakyDump(older);
+        com.jfa.testdata.UnboundedOrderCache.fillMore(700);
+        HeapDumpSupport.leakyDump(newer);
+        DiagnoseRequest req = base(dir);
+        req.setMode(AnalysisMode.MEMORY);
+        req.setHprof(newer);
+        req.setHprofPrev(older);
+        DiagnoseResult r = new DiagnoseOrchestrator().run(req);
+        Assert.assertNotNull(r.getReport().sectionOfType("heap_compare"));
+        Assert.assertTrue(r.getText().contains("堆对比") || r.getJson().contains("judgment"));
+        File run = r.getTextFile().getParentFile();
+        Assert.assertTrue(new File(new File(run, "heap"), "compare-summary.json").isFile());
+        String[] heapFiles = new File(run, "heap").list();
+        Assert.assertNotNull(heapFiles);
+        boolean one = false;
+        boolean two = false;
+        for (String n : heapFiles) {
+            if (n.startsWith("heap-1-")) {
+                one = true;
+            }
+            if (n.startsWith("heap-2-")) {
+                two = true;
+            }
+        }
+        Assert.assertTrue(one && two);
+        Assert.assertFalse(r.getText().contains("## 7"));
+        Assert.assertFalse(r.getText().contains("请研发自行"));
+    }
+
+    @Test
+    public void appLogLookbackCopiesExcerpt() throws Exception {
+        File dir = tmp.newFolder("logs-run");
+        File log = new File(dir, "app.log");
+        long now = System.currentTimeMillis();
+        String ts = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                .withZone(java.time.ZoneId.systemDefault())
+                .format(java.time.Instant.ofEpochMilli(now - 30_000L));
+        java.nio.file.Files.write(log.toPath(),
+                (ts + " ERROR com.example - java.lang.OutOfMemoryError: Java heap space\n").getBytes("UTF-8"));
+        DiagnoseRequest req = base(dir);
+        req.setMode(AnalysisMode.MEMORY);
+        req.setAppLog(log);
+        DiagnoseResult r = new DiagnoseOrchestrator().run(req);
+        Assert.assertNotNull(r.getReport().sectionOfType("log_lookback"));
+        Assert.assertTrue(r.getText().contains("日志倒查") || r.getText().contains("OutOfMemoryError"));
+        File hits = new File(new File(r.getTextFile().getParentFile(), "logs"), "lookback-hits.txt");
+        Assert.assertTrue(hits.isFile());
+    }
+
     private DiagnoseResult run(File evidenceDir, AnalysisMode mode, File hprof, File gc, File td) {
         DiagnoseRequest req = base(evidenceDir);
         req.setMode(mode);
         req.setHprof(hprof);
         req.setGcLog(gc);
         req.setThreadDump(td);
+        req.setLiveCollect(false);
+        req.setConfirm(true);
         return new DiagnoseOrchestrator().run(req);
     }
 
     private DiagnoseRequest base(File evidenceDir) {
         JfaConfig cfg = JfaConfig.defaults();
-        cfg.setEvidenceRoot(tmp.getRoot());
+        cfg.setRegistryRoot(tmp.getRoot());
+        cfg.setReportfileRoot(new File(tmp.getRoot(), "reportfile"));
         DiagnoseRequest req = new DiagnoseRequest();
         req.setConfig(cfg);
         req.setEvidenceDir(evidenceDir);
         req.setLiveCollect(false);
+        req.setConfirm(true);
         req.setFormat(OutputFormat.BOTH);
         req.setOutDir(new File(tmp.getRoot(), "reports"));
         return req;

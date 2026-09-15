@@ -21,6 +21,8 @@ public class DiagnoseRequest {
     private OutputFormat format = OutputFormat.BOTH;
     private boolean liveCollect = true;
     private String commandLineHint;
+    private File hprofPrev;
+    private Long compareAfterMs;
 
     public JfaConfig getConfig() {
         return config;
@@ -132,5 +134,21 @@ public class DiagnoseRequest {
 
     public void setCommandLineHint(String commandLineHint) {
         this.commandLineHint = commandLineHint;
+    }
+
+    public File getHprofPrev() {
+        return hprofPrev;
+    }
+
+    public void setHprofPrev(File hprofPrev) {
+        this.hprofPrev = hprofPrev;
+    }
+
+    public Long getCompareAfterMs() {
+        return compareAfterMs;
+    }
+
+    public void setCompareAfterMs(Long compareAfterMs) {
+        this.compareAfterMs = compareAfterMs;
     }
 }

@@ -21,6 +21,8 @@ public class CliCommandsTest {
         Capture c = run(0, "help");
         Assert.assertTrue(c.out.contains("diagnose"));
         Assert.assertTrue(c.out.contains("--type"));
+        Assert.assertTrue(c.out.contains("--compare-after"));
+        Assert.assertTrue(c.out.contains("--hprof-prev"));
         Assert.assertTrue(c.out.contains("help config"));
         Assert.assertFalse(c.out.contains("第一步") && c.out.contains("jfa start"));
         Assert.assertTrue(c.out.contains("无需 jfa start") || c.out.contains("不要先 start")
@@ -80,7 +82,6 @@ public class CliCommandsTest {
         Assert.assertEquals("auto", report.getAnalysisMode());
         Assert.assertFalse(report.getSummary().isFabricatedRootCause());
         Assert.assertFalse(health.out.contains("disclaimer"));
-        Assert.assertFalse(health.out.contains("\"sections\""));
         Assert.assertTrue(health.err.contains("JSON 报告") || health.err.contains("报告文件"));
         Assert.assertTrue(health.err.contains("/") || health.err.contains("\\"));
 
@@ -133,9 +134,10 @@ public class CliCommandsTest {
         Assert.assertTrue(confDir.mkdirs());
         File cfg = new File(confDir, "jfa.properties");
         java.nio.file.Files.write(cfg.toPath(),
-                ("evidence.root=" + new File(install, "evidence").getAbsolutePath().replace("\\", "/")
-                        + "\ncover.file=true\nretention.days=7\n"
-                        + "min.free.bytes=1\nmin.free.ratio=0\n")
+                ("cover.file=true\nretention.days=7\n"
+                        + "min.free.bytes=1\nmin.free.ratio=0\n"
+                        + "sample.interval.seconds=5\nsample.count=8\n"
+                        + "log.lookback.minutes=10\ncompare.top.n=20\n")
                         .getBytes(StandardCharsets.UTF_8));
         File testdata = testdata();
         Capture c = run(0, "--config", cfg.getAbsolutePath(), "analyze",
@@ -157,9 +159,11 @@ public class CliCommandsTest {
     }
 
     private File writeConfig(File home) throws Exception {
-        File cfg = new File(home, "jfa.properties");
+        File conf = new File(home, "conf");
+        Assert.assertTrue(conf.mkdirs() || conf.isDirectory());
+        File cfg = new File(conf, "jfa.properties");
         java.nio.file.Files.write(cfg.toPath(),
-                ("evidence.root=" + home.getAbsolutePath().replace("\\", "/") + "\nretention.days=7\n")
+                ("cover.file=true\nretention.days=7\nmin.free.bytes=1\nmin.free.ratio=0\n")
                         .getBytes(StandardCharsets.UTF_8));
         return cfg;
     }

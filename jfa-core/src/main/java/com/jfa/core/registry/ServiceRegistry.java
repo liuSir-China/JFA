@@ -125,7 +125,7 @@ public class ServiceRegistry {
 
     public List<ServiceMeta> list() {
         List<ServiceMeta> out = new ArrayList<ServiceMeta>();
-        File root = config.getEvidenceRoot();
+        File root = config.getRegistryRoot();
         if (root == null || !root.isDirectory()) {
             return out;
         }
@@ -151,7 +151,7 @@ public class ServiceRegistry {
         if (primary.isFile()) {
             return primary;
         }
-        File root = config.getEvidenceRoot();
+        File root = config.getRegistryRoot();
         if (root != null && root.isDirectory()) {
             File nested = new File(new File(root, serviceId), "meta.json");
             if (nested.isFile()) {

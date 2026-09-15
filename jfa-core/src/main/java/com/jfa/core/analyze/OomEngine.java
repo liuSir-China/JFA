@@ -147,9 +147,8 @@ public class OomEngine {
             a.sectionStatus = "degraded";
             a.oneLineFault = "日志级 OOM 初诊（E2）：" + (stack.detail == null ? "heap OOM" : stack.detail)
                     + "。不能做精确对象归因。";
-            a.missing.add("hprof（HeapDumpOnOutOfMemoryError 或 jfa collect heapdump --confirm）");
-            a.next.add("下次重启按 jfa help config 补齐滚动 GC 日志与 HeapDumpOnOutOfMemoryError（可选增强，非前提）");
-            a.next.add("若进程仍存活：确认后执行 jfa collect heapdump --pid <pid> --confirm 后复跑 --type memory");
+            a.missing.add("hprof（`jfa diagnose --pid <pid> --type memory --confirm` 或 `--hprof`）");
+            a.next.add("由本产品采集或传入 hprof 后复跑 --type memory");
             a.recommendations = e2Recommendations(stack, trend);
         } else if (trend.available && !stack.found) {
             a.level = EvidenceLevel.E2;
@@ -168,9 +167,7 @@ public class OomEngine {
             a.sectionStatus = "degraded";
             a.oneLineFault = "栈级弱结论：确认 " + stack.detail + "，缺少 GC 日志与 hprof，不能做对象归因。";
             a.missing.add("hprof");
-            a.missing.add("GC 文件日志");
-            a.next.add("保留应用日志 OOM 栈；补齐 hprof 后复跑本产品 --type memory");
-            a.next.add("可选：jfa help config 抄作业，下次重启打开 GC 文件日志（非使用前提）");
+            a.next.add("由本产品 `--hprof` 或活体 `--confirm` 补齐堆快照");
             a.recommendations = e1Recommendations(stack);
         } else {
             a.level = EvidenceLevel.E0;
@@ -180,15 +177,12 @@ public class OomEngine {
             a.sectionStatus = dumpRefused ? "degraded" : "ok";
             a.oneLineFault = "未发现堆 OOM 证据。";
             if (dumpRefused) {
-                a.capabilityLimit = "用户未确认活体 heap dump / 采样：不能做对象级堆归因；当前仅基于非 dump 证据（命令行/已有日志）。";
+                a.capabilityLimit = "用户未确认活体 heap dump：不能做对象级堆归因；采样与日志倒查仍由本产品执行。";
                 a.missing.add("hprof（用户拒绝或未触发活体 dump）");
-                a.next.add("若需提高内存侧置信度：确认后执行 jfa collect heapdump --pid <pid> --confirm 后复跑 --type memory");
+                a.next.add("确认后执行 jfa diagnose --pid <pid> --type memory --confirm");
             } else {
                 a.missing.add("hprof");
-                a.missing.add("可用 GC 日志");
-                a.missing.add("应用日志中的 OOM 栈");
-                a.next.add("进程仍存活时可在确认后 dump；或登记已有证据目录后 analyze --type memory");
-                a.next.add("可选证据增强见 jfa help config（不是使用前提）");
+                a.next.add("进程仍存活时 `jfa diagnose --pid <pid> --type memory --confirm`，或传入 `--hprof`");
             }
             if (commandLine != null && commandLine.contains("-Xmx")) {
                 a.riskHints.add("命令行含堆参数（" + extractXmx(commandLine) + "），无 hprof 时仅作基线——非根因");
@@ -220,9 +214,9 @@ public class OomEngine {
                 "若上调后到达 OOM 的时间近似线性推迟，则印证泄漏仍在。");
         r.getCapacity().add(cap);
         Recommendation ops = new Recommendation("REC-OPS-01",
-                "保留本次 hprof/GC 至研发确认修复；按 retention 策略防盘满。可选下次重启按 jfa help config 补齐自动 dump（非本诊断前提）。",
-                "便于对比修复前后；单次 dump 无法证明增长率时，按间隔再 dump 后复跑本产品对比。",
-                "修复版本上线后同等演练不再 OOM；第二次 dump 复跑本产品确认主导类型下降。");
+                "保留本次运行目录中的 hprof；若需验证是否持续增长，用本产品 `--compare-after` 或 `--hprof-prev` 做双快照对比。",
+                "单次快照给出修改方向；间隔对比由本产品完成，不必把 dump 交给外部 GUI。",
+                "对比报告中嫌疑类型 Δ 下降或稳定，即可验证修复。");
         r.getOps().add(ops);
         return r;
     }
@@ -230,9 +224,9 @@ public class OomEngine {
     private static Recommendations e2Recommendations(AppLogAnalyzer.OomStack stack, GcLogAnalyzer.GcTrend trend) {
         Recommendations r = new Recommendations();
         r.getOps().add(new Recommendation("REC-OPS-01",
-                "补齐 hprof 后复跑 jfa analyze --type memory，才能做对象级归因。",
-                "当前仅有 GC 趋势，不能做精确对象归因。",
-                "取得 hprof 后报告应出现 Top 类与可行动代码建议。"));
+                "由本产品补第二份 hprof：活体 `jfa diagnose --pid <pid> --type memory --confirm`，或离线 `--hprof` / `--hprof-prev`。",
+                "当前无对象级直方图，双快照对比与采样/日志倒查由本产品执行。",
+                "取得 hprof 后报告应出现 Top 类与堆对比判读。"));
         if (trend.oldRising) {
             r.getCapacity().add(new Recommendation("REC-CAP-01",
                     "临时评估 Full GC 频率与 -Xmx，但不能当作根因修复。",
@@ -244,11 +238,10 @@ public class OomEngine {
 
     private static Recommendations e1Recommendations(AppLogAnalyzer.OomStack stack) {
         Recommendations r = new Recommendations();
-        String site = stack.frames.isEmpty() ? "OOM 抛出点" : stack.frames.get(0);
         r.getOps().add(new Recommendation("REC-OPS-01",
-                "围绕 " + site + " 保留现场日志，并补 hprof/GC 后复跑本产品。",
-                "仅有 OOM 栈，不能做对象级或趋势级归因。",
-                "补证据后 E2/E3 报告字段完整。"));
+                "指定 `--hprof` 或对仍存活进程执行 `jfa diagnose --pid <pid> --type memory --confirm`。",
+                "仅有 OOM 栈时本产品不能做对象级归因；日志倒查已由本产品完成。",
+                "补 hprof 后报告出现 Top 类。"));
         return r;
     }
 
@@ -256,14 +249,10 @@ public class OomEngine {
         Recommendations r = new Recommendations();
         r.getOps().add(new Recommendation("REC-OPS-01",
                 dumpRefused
-                        ? "若需提高内存侧置信度：确认后执行 jfa collect heapdump --pid … --confirm 后复跑 --type memory"
-                        : "无硬性代码修改建议；证据不足以指向具体根因。可选 jfa help config 下次重启补齐 GC/hprof 参数（非本诊断前提）。",
+                        ? "需要对象级归因时：`jfa diagnose --pid <pid> --type memory --confirm`（本产品采集并分析）。"
+                        : "无硬性代码修改建议。需要对象级归因时由本产品 `--confirm` 采集 hprof，或传入 `--hprof`。",
                 dumpRefused ? "未取得 hprof，不能做对象级堆归因。" : "健康体检弱结论，禁止硬编根因。",
                 "复跑后对照 heap_oom_evidence_found 与 Top 类是否出现。"));
-        r.getOps().add(new Recommendation("REC-OPS-02",
-                "可选：jfa help config 抄作业，下次重启补齐 GC/hprof 参数（非本诊断前提）",
-                "提高事后归因上限，不阻挡当前诊断。",
-                "重启后确认 gc 目录与 HeapDumpPath 可写。"));
         return r;
     }
 
@@ -315,7 +304,7 @@ public class OomEngine {
         } else {
             a.complexity = "normal";
         }
-        a.singleDumpLimitation = "单次 hprof 无法做间隔增长对比（若需验证增长率，间隔再 dump 后复跑本产品，不要依赖外部 GUI）。";
+        a.singleDumpLimitation = "单次 hprof 无法做间隔增长对比；使用本产品 `--compare-after` 或 `--hprof-prev` 即可自动对比。";
     }
 
     private static String extractXmx(String cmd) {

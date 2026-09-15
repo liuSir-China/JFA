@@ -12,10 +12,12 @@ public final class UnboundedOrderCache {
     }
 
     public static void fill() {
-        if (delegate.size() >= 400) {
-            return;
-        }
-        for (int i = 0; i < 400; i++) {
+        fillMore(400);
+    }
+
+    public static void fillMore(int targetSize) {
+        int start = delegate.size();
+        for (int i = start; i < targetSize; i++) {
             delegate.put(i, new byte[16 * 1024]);
         }
     }

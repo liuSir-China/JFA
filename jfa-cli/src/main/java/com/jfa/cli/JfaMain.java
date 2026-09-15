@@ -9,11 +9,13 @@ import com.jfa.common.config.JfaConfig;
 import com.jfa.common.json.JsonSupport;
 import com.jfa.common.model.JavaProcessInfo;
 import com.jfa.common.model.ServiceMeta;
+import com.jfa.common.time.TimeSupport;
 import com.jfa.core.collect.ConfirmGate;
 import com.jfa.core.collect.JdkCollectors;
 import com.jfa.core.diagnose.DiagnoseOrchestrator;
 import com.jfa.core.diagnose.DiagnoseRequest;
 import com.jfa.core.diagnose.DiagnoseResult;
+import com.jfa.core.diagnose.RunLayout;
 import com.jfa.core.discovery.JavaProcessDiscovery;
 import com.jfa.core.evidence.EvidenceEnhancer;
 import com.jfa.core.evidence.EvidenceGc;
@@ -170,6 +172,16 @@ public class JfaMain {
             req.setThreadDump(new File(p.opt("thread-dump")));
         }
         req.setConfirm(p.flag("confirm"));
+        if (p.opt("hprof-prev") != null) {
+            req.setHprofPrev(new File(p.opt("hprof-prev")));
+        }
+        String compareAfter = p.opt("compare-after");
+        if (compareAfter == null || compareAfter.trim().isEmpty()) {
+            compareAfter = config.getCompareAfter();
+        }
+        if (compareAfter != null && !compareAfter.trim().isEmpty()) {
+            req.setCompareAfterMs(TimeSupport.parseDurationMs(compareAfter));
+        }
         if (p.opt("out") != null) {
             req.setOutDir(new File(p.opt("out")));
         }
@@ -215,11 +227,11 @@ public class JfaMain {
             ConfirmGate.assertDumpAllowed(p.flag("confirm"));
         }
         JavaProcessInfo proc = new JavaProcessDiscovery().requirePid(pid);
-        File evidenceDir = p.opt("evidence-dir") != null ? new File(p.opt("evidence-dir"))
-                : config.serviceDir("pid-" + pid);
-        if (p.opt("service") != null) {
-            evidenceDir = new ServiceRegistry(config).evidenceDirOf(
-                    new ServiceRegistry(config).require(p.opt("service")));
+        File evidenceDir;
+        if (p.opt("evidence-dir") != null) {
+            evidenceDir = new File(p.opt("evidence-dir"));
+        } else {
+            evidenceDir = RunLayout.prepareRunDir(config, "pid_" + pid, null);
         }
         JdkCollectors col = new JdkCollectors(config);
         if ("threaddump".equals(sub) || "thread-dump".equals(sub)) {

@@ -32,16 +32,33 @@ public class JfaConfigPropertiesTest {
         }
         String all = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
         Assert.assertTrue(all.contains("cover.file=true"));
-        Assert.assertTrue(all.contains("evidence.root="));
+        Assert.assertFalse(all.contains("evidence.root"));
         Assert.assertTrue(all.contains("retention.days="));
         Assert.assertTrue(all.contains("min.free.bytes="));
         Assert.assertTrue(all.contains("min.free.ratio="));
+        Assert.assertTrue(all.contains("sample.interval.seconds="));
+        Assert.assertTrue(all.contains("sample.count="));
+        Assert.assertTrue(all.contains("log.lookback.minutes="));
+        Assert.assertTrue(all.contains("compare.top.n="));
         Assert.assertFalse(all.contains("require.confirm"));
         Assert.assertFalse(all.contains("trading.hours"));
         Assert.assertFalse(all.contains("outbound.enabled"));
         JfaConfig cfg = JfaConfig.load(f);
         Assert.assertTrue(cfg.isCoverFile());
         Assert.assertEquals(7, cfg.getRetentionDays());
+        Assert.assertEquals(5, cfg.getSampleIntervalSeconds());
+        Assert.assertEquals(8, cfg.getSampleCount());
+        Assert.assertEquals(10, cfg.getLogLookbackMinutes());
+        Assert.assertEquals(20, cfg.getCompareTopN());
+        Assert.assertNull(cfg.getCompareAfter());
+    }
+
+    @Test
+    public void defaultsDoNotWriteUnderUserHomeEvidence() {
+        JfaConfig cfg = JfaConfig.defaults();
+        File homeEvidence = new File(System.getProperty("user.home"), ".jfa/evidence");
+        Assert.assertFalse(homeEvidence.getAbsolutePath().equals(cfg.getReportfileRoot().getAbsolutePath()));
+        Assert.assertFalse(cfg.getRegistryRoot().getAbsolutePath().contains(homeEvidence.getAbsolutePath()));
     }
 
     private static File propertiesFile() {
