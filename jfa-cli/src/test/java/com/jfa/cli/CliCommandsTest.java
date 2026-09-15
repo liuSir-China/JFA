@@ -134,7 +134,7 @@ public class CliCommandsTest {
         File cfg = new File(confDir, "jfa.properties");
         java.nio.file.Files.write(cfg.toPath(),
                 ("evidence.root=" + new File(install, "evidence").getAbsolutePath().replace("\\", "/")
-                        + "\ncover.file=true\noutbound.enabled=false\nretention.days=7\n"
+                        + "\ncover.file=true\nretention.days=7\n"
                         + "min.free.bytes=1\nmin.free.ratio=0\n")
                         .getBytes(StandardCharsets.UTF_8));
         File testdata = testdata();

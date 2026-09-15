@@ -36,12 +36,11 @@ public class JfaConfigPropertiesTest {
         Assert.assertTrue(all.contains("retention.days="));
         Assert.assertTrue(all.contains("min.free.bytes="));
         Assert.assertTrue(all.contains("min.free.ratio="));
-        Assert.assertTrue(all.contains("outbound.enabled=false"));
         Assert.assertFalse(all.contains("require.confirm"));
         Assert.assertFalse(all.contains("trading.hours"));
+        Assert.assertFalse(all.contains("outbound.enabled"));
         JfaConfig cfg = JfaConfig.load(f);
         Assert.assertTrue(cfg.isCoverFile());
-        Assert.assertFalse(cfg.isOutboundEnabled());
         Assert.assertEquals(7, cfg.getRetentionDays());
     }
 

@@ -22,7 +22,6 @@ public class JfaConfig {
     private long minFreeBytes = 1L * 1024 * 1024 * 1024;
     private double minFreeRatio = 0.05d;
     private boolean coverFile = true;
-    private boolean outboundEnabled = false;
     private File configFile;
 
     public static JfaConfig load(File configFile) {
@@ -83,7 +82,6 @@ public class JfaConfig {
         this.minFreeBytes = longProp(p, "min.free.bytes", minFreeBytes);
         this.minFreeRatio = doubleProp(p, "min.free.ratio", minFreeRatio);
         this.coverFile = boolProp(p, "cover.file", coverFile);
-        this.outboundEnabled = boolProp(p, "outbound.enabled", outboundEnabled);
     }
 
     private static File firstExisting(String... paths) {
@@ -190,10 +188,6 @@ public class JfaConfig {
 
     public void setCoverFile(boolean coverFile) {
         this.coverFile = coverFile;
-    }
-
-    public boolean isOutboundEnabled() {
-        return outboundEnabled;
     }
 
     public File getConfigFile() {

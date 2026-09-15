@@ -70,9 +70,9 @@ jfa evidence gc --service order-svc
 
 部分成功（例如线程侧成功、内存侧证据弱）时退出码为 0，报告内 `sections[].status` 分段标注。
 
-## 不出域
+## 数据范围
 
-默认 `outbound.enabled=false`。诊断流程不上传 dump。可选导出仅打本地包。
+JFA 仅在本机读写证据与报告，无上传、无外发能力。
 
 ## 测试数据
 
