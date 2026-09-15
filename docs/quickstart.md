@@ -18,6 +18,7 @@ jfa diagnose --pid <pid>
 ```bash
 jfa diagnose --pid <pid> --type memory
 jfa diagnose --pid <pid> --type thread
+jfa diagnose --pid <pid> --type memory --compare-after 15m --confirm
 ```
 
 ## 2. 按服务名（可选登记，不托管生命周期）
@@ -34,6 +35,7 @@ jfa diagnose --service order-svc
 ```bash
 jfa analyze --evidence-dir /var/jfa/order-svc
 jfa analyze --hprof ./heap/java_pid.hprof --gc-log ./gc/gc.log --type memory
+jfa analyze --hprof ./heap/newer.hprof --hprof-prev ./heap/older.hprof --type memory
 jfa analyze --thread-dump ./threads/td.txt --type thread
 ```
 
@@ -49,7 +51,7 @@ jfa collect heapdump --pid <pid> --confirm
 jfa collect sample --pid <pid> --interval 5s --duration 60s --confirm
 ```
 
-无确认时不会生成 hprof、不会附加 jstat。`diagnose`/`analyze` 对活体 pid 会优先复用目标 JVM 已有 hprof/GC，证据不足才采集。
+无确认时不会生成 hprof。`diagnose` 对活体 pid 会优先复用目标 JVM 已有 hprof/GC（并复制进本轮 `reportfile` 目录），证据不足才采集。诊断内短时 `jstat -gcutil` 采样与日志倒查由产品自动执行。
 
 ## 5. 抄作业：推荐 JVM 配置（可选，非前提）
 

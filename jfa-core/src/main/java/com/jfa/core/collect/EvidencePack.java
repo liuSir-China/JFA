@@ -14,6 +14,7 @@ public class EvidencePack {
     private File appLog;
     private File threadDump;
     private File jstatSample;
+    private File hprofPrev;
     private ServiceMeta meta;
 
     public File getEvidenceDir() {
@@ -62,6 +63,14 @@ public class EvidencePack {
 
     public void setJstatSample(File jstatSample) {
         this.jstatSample = jstatSample;
+    }
+
+    public File getHprofPrev() {
+        return hprofPrev;
+    }
+
+    public void setHprofPrev(File hprofPrev) {
+        this.hprofPrev = hprofPrev;
     }
 
     public ServiceMeta getMeta() {

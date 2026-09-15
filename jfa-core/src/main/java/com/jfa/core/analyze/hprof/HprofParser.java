@@ -481,15 +481,17 @@ public class HprofParser {
                 total += h.bytes;
             }
             s.approxUsedBytes = total;
-            int n = Math.min(20, list.size());
-            for (int i = 0; i < n; i++) {
+            for (int i = 0; i < list.size(); i++) {
                 Hist h = list.get(i);
                 HprofSummary.ClassStat st = new HprofSummary.ClassStat();
                 st.className = h.name;
                 st.instances = h.instances;
                 st.retainedBytes = h.bytes;
                 st.ratio = total == 0 ? 0d : (double) h.bytes / (double) total;
-                s.topClasses.add(st);
+                s.allClasses.add(st);
+                if (s.topClasses.size() < 20) {
+                    s.topClasses.add(st);
+                }
             }
             for (ClassDef def : classes.values()) {
                 if (def.name != null && looksCacheHolder(def.name) && def.staticFieldNames != null) {
@@ -528,6 +530,7 @@ public class HprofParser {
         public List<String> primaryHolderFields = new ArrayList<String>();
         public final List<String> staticHolders = new ArrayList<String>();
         public final List<ClassStat> topClasses = new ArrayList<ClassStat>();
+        public final List<ClassStat> allClasses = new ArrayList<ClassStat>();
 
         public static class ClassStat {
             public String className;

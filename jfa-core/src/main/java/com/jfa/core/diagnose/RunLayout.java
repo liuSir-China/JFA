@@ -36,6 +36,7 @@ public final class RunLayout {
         FileSupport.mkdirs(new File(runDir, "threads"));
         FileSupport.mkdirs(new File(runDir, "gc"));
         FileSupport.mkdirs(new File(runDir, "samples"));
+        FileSupport.mkdirs(new File(runDir, "logs"));
         return runDir.getAbsoluteFile();
     }
 

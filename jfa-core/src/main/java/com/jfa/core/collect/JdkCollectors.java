@@ -129,13 +129,58 @@ public class JdkCollectors {
         return out;
     }
 
+    /**
+     * Product-executed short {@code jstat -gcutil} sampling. Not a dangerous collect gate.
+     *
+     * @return raw output file, or null if jstat is missing
+     */
+    public File collectGcutilSample(JavaProcessInfo proc, File runDir, int intervalSeconds, int count) {
+        File dir = new File(runDir, "samples");
+        FileSupport.mkdirs(dir);
+        File jstat = locator.findTool("jstat", proc.getJavaHome());
+        if (jstat == null) {
+            return null;
+        }
+        int interval = Math.max(1, intervalSeconds);
+        int n = Math.max(1, count);
+        long timeout = interval * 1000L * n + 8000L;
+        List<String> cmd = new ArrayList<String>();
+        cmd.add(jstat.getAbsolutePath());
+        cmd.add("-gcutil");
+        cmd.add(String.valueOf(proc.getPid()));
+        cmd.add(String.valueOf(interval * 1000));
+        cmd.add(String.valueOf(n));
+        ProcessRunner.Result r;
+        try {
+            r = runner.run(cmd, timeout);
+        } catch (JfaException e) {
+            File out = new File(dir, "jstat-gcutil-" + TimeSupport.nowFileStamp() + ".txt");
+            FileSupport.writeUtf8(out, "jstat failed: " + e.getMessage());
+            return out;
+        }
+        String body = r.stdout == null ? "" : r.stdout;
+        if (r.stderr != null && !r.stderr.trim().isEmpty()) {
+            body = body + (body.endsWith("\n") ? "" : "\n") + r.stderr;
+        }
+        File out = new File(dir, "jstat-gcutil-" + TimeSupport.nowFileStamp() + ".txt");
+        FileSupport.writeUtf8(out, body);
+        return out;
+    }
+
+    /**
+     * Collect a heap dump after confirmation has already been obtained for this command.
+     */
+    public File collectHeapDumpConfirmed(JavaProcessInfo proc, File evidenceDir) {
+        return collectHeapDump(proc, evidenceDir, true);
+    }
+
     public String jstatOnce(JavaProcessInfo proc) {
         File jstat = locator.findTool("jstat", proc.getJavaHome());
         if (jstat == null) {
             return null;
         }
         ProcessRunner.Result r = runner.run(Arrays.asList(
-                jstat.getAbsolutePath(), "-gc", String.valueOf(proc.getPid())), 10000L);
+                jstat.getAbsolutePath(), "-gcutil", String.valueOf(proc.getPid())), 10000L);
         if (r.exitCode == 0) {
             return r.stdout;
         }
@@ -163,26 +208,11 @@ public class JdkCollectors {
         if (duration == null || duration.isEmpty()) {
             return 60000L;
         }
-        return parseTimeMs(duration);
+        return TimeSupport.parseDurationMs(duration);
     }
 
     private static String intervalToMs(String interval) {
-        long ms = parseTimeMs(interval);
+        long ms = TimeSupport.parseDurationMs(interval);
         return String.valueOf(ms);
-    }
-
-    private static long parseTimeMs(String raw) {
-        String v = raw.trim().toLowerCase();
-        long mul = 1L;
-        if (v.endsWith("ms")) {
-            v = v.substring(0, v.length() - 2);
-        } else if (v.endsWith("s")) {
-            mul = 1000L;
-            v = v.substring(0, v.length() - 1);
-        } else if (v.endsWith("m")) {
-            mul = 60000L;
-            v = v.substring(0, v.length() - 1);
-        }
-        return Long.parseLong(v) * mul;
     }
 }

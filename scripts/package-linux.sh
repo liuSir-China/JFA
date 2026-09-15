@@ -39,23 +39,8 @@ if [[ -f "$ROOT/docs/user-manual.md" ]]; then
 fi
 cp -R "$ROOT/testdata/." "$DEST/testdata/"
 
-cat > "$DEST/bin/jfa" << 'LAUNCH'
-#!/usr/bin/env bash
-set -euo pipefail
-HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/.." && pwd)"
-mkdir -p "$ROOT/reportfile"
-if [[ -z "${JAVA_HOME:-}" ]]; then
-  JAVA_BIN="$(command -v java || true)"
-else
-  JAVA_BIN="$JAVA_HOME/bin/java"
-fi
-if [[ -z "${JAVA_BIN}" || ! -x "${JAVA_BIN}" ]]; then
-  echo "ERROR: java not found. Install JDK 8 and set JAVA_HOME." >&2
-  exit 99
-fi
-exec "$JAVA_BIN" -Dfile.encoding=UTF-8 -jar "$ROOT/lib/jfa.jar" --config "$ROOT/conf/jfa.properties" "$@"
-LAUNCH
+# Copy launcher with Unix LF only (CRLF makes bash fail with $'\r').
+tr -d '\r' < "$ROOT/scripts/jfa-launcher.sh" > "$DEST/bin/jfa"
 chmod +x "$DEST/bin/jfa"
 
 echo "Packaged: $DEST"

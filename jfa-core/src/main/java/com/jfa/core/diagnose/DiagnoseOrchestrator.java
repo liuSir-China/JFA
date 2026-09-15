@@ -17,13 +17,18 @@ import com.jfa.common.model.report.Recommendation;
 import com.jfa.common.model.report.ReportSection;
 import com.jfa.common.model.report.TimelineEvent;
 import com.jfa.common.time.TimeSupport;
+import com.jfa.core.analyze.AppLogLookback;
 import com.jfa.core.analyze.DeadlockEngine;
+import com.jfa.core.analyze.JstatGcutilAnalyzer;
 import com.jfa.core.analyze.OomEngine;
+import com.jfa.core.analyze.hprof.HprofComparer;
+import com.jfa.core.analyze.hprof.HprofParser;
 import com.jfa.core.collect.ConfirmGate;
 import com.jfa.core.collect.EvidencePack;
 import com.jfa.core.collect.JdkCollectors;
 import com.jfa.core.discovery.JavaProcessDiscovery;
 import com.jfa.core.evidence.JvmEvidenceLocator;
+import com.jfa.core.evidence.LogPathResolver;
 import com.jfa.core.io.FileSupport;
 import com.jfa.core.registry.ServiceRegistry;
 import com.jfa.core.report.TextReportRenderer;
@@ -40,6 +45,10 @@ public class DiagnoseOrchestrator {
     private final DeadlockEngine deadlockEngine = new DeadlockEngine();
     private final OomEngine oomEngine = new OomEngine();
     private final TextReportRenderer textRenderer = new TextReportRenderer();
+    private final JstatGcutilAnalyzer gcutilAnalyzer = new JstatGcutilAnalyzer();
+    private final AppLogLookback logLookback = new AppLogLookback();
+    private final HprofParser hprofParser = new HprofParser();
+    private final HprofComparer hprofComparer = new HprofComparer();
 
     public DiagnoseResult run(DiagnoseRequest req) {
         JfaConfig cfg = req.getConfig();
@@ -55,14 +64,27 @@ public class DiagnoseOrchestrator {
 
         EvidencePack pack = buildPack(req, target, report);
         pack.setEvidenceDir(target.runDir);
+        ingestIntoRunDir(pack, target.runDir, report, req);
 
         boolean dumpRefused = false;
         if (req.getMode().includeThread()) {
             collectThreadIfNeeded(req, target, pack, report);
         }
         if (req.getMode().includeMemory()) {
-            dumpRefused = collectMemoryIfNeeded(req, target, pack, report);
+            dumpRefused = collectDump1IfNeeded(req, target, pack, report);
         }
+
+        JstatGcutilAnalyzer.SampleTrend sample = null;
+        if (req.getMode().includeMemory()) {
+            sample = runSampling(req, target, pack, report);
+        }
+        AppLogLookback.Result lookback = runLogLookback(req, target, pack, report);
+
+        if (req.getMode().includeMemory()) {
+            collectDump2IfNeeded(req, target, pack, report);
+        }
+
+        HprofComparer.CompareResult compare = runCompare(req, pack, report);
 
         DeadlockEngine.ThreadAnalysis thread = null;
         if (req.getMode().includeThread()) {
@@ -77,8 +99,17 @@ public class DiagnoseOrchestrator {
             memory = oomEngine.analyze(pack, dumpRefused, cmd);
             addMemorySection(report, memory, pack);
         }
+        if (sample != null && sample.available) {
+            addSampleSection(report, sample, pack);
+        }
+        if (lookback != null) {
+            addLogSection(report, lookback);
+        }
+        if (compare != null) {
+            addCompareSection(report, compare, pack);
+        }
 
-        finalizeSummary(report, req.getMode(), thread, memory);
+        finalizeSummary(report, req.getMode(), thread, memory, sample, lookback, compare);
         DiagnoseResult result = write(report, req, target);
         if (req.getMode() == AnalysisMode.THREAD && thread == null && report.sectionOfType("thread") != null
                 && "failed".equals(report.sectionOfType("thread").getStatus())) {
@@ -91,6 +122,7 @@ public class DiagnoseOrchestrator {
         EvidencePack pack = new EvidencePack();
         pack.setMeta(target.meta);
         pack.setHprof(existingFile(req.getHprof()));
+        pack.setHprofPrev(existingFile(req.getHprofPrev()));
         pack.setGcLog(existingFile(req.getGcLog()));
         pack.setAppLog(existingFile(req.getAppLog()));
         pack.setThreadDump(existingFile(req.getThreadDump()));
@@ -127,7 +159,66 @@ public class DiagnoseOrchestrator {
         if (pack.getJstatSample() == null) {
             pack.setJstatSample(fromDir.getJstatSample());
         }
+        if (pack.getAppLog() == null) {
+            File resolved = LogPathResolver.resolve(req.getAppLog(), target.meta, target.process);
+            if (resolved != null) {
+                pack.setAppLog(resolved);
+            }
+        }
         return pack;
+    }
+
+    private void ingestIntoRunDir(EvidencePack pack, File runDir, DiagnoseReport report, DiagnoseRequest req) {
+        boolean compare = req.getCompareAfterMs() != null || req.getHprofPrev() != null;
+        if (pack.getHprof() != null) {
+            String name = compare ? "heap-2-" + pack.getHprof().getName() : pack.getHprof().getName();
+            if (req.getHprofPrev() != null) {
+                name = "heap-2-" + stampName(pack.getHprof(), ".hprof");
+            } else if (req.getCompareAfterMs() != null) {
+                name = "heap-1-" + stampName(pack.getHprof(), ".hprof");
+            }
+            File copied = ingest(pack.getHprof(), runDir, "heap", name);
+            if (copied != null && copied != pack.getHprof()) {
+                report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                        "已将复用 hprof 纳入本轮运行目录", copied.getAbsolutePath()));
+            }
+            pack.setHprof(copied);
+        }
+        if (pack.getHprofPrev() != null) {
+            File copied = ingest(pack.getHprofPrev(), runDir, "heap",
+                    "heap-1-" + stampName(pack.getHprofPrev(), ".hprof"));
+            pack.setHprofPrev(copied);
+        }
+        if (pack.getGcLog() != null) {
+            pack.setGcLog(ingest(pack.getGcLog(), runDir, "gc", pack.getGcLog().getName()));
+        }
+        if (pack.getAppLog() != null) {
+            pack.setAppLog(ingest(pack.getAppLog(), runDir, "logs", pack.getAppLog().getName()));
+        }
+        if (pack.getThreadDump() != null) {
+            pack.setThreadDump(ingest(pack.getThreadDump(), runDir, "threads", pack.getThreadDump().getName()));
+        }
+        if (pack.getJstatSample() != null) {
+            pack.setJstatSample(ingest(pack.getJstatSample(), runDir, "samples", pack.getJstatSample().getName()));
+        }
+    }
+
+    private static String stampName(File src, String suffix) {
+        String n = src.getName();
+        if (n.toLowerCase().endsWith(suffix)) {
+            return n;
+        }
+        return TimeSupport.nowFileStamp() + suffix;
+    }
+
+    private static File ingest(File src, File runDir, String sub, String destName) {
+        if (src == null || !src.isFile()) {
+            return src;
+        }
+        if (FileSupport.isUnder(src, runDir)) {
+            return src.getAbsoluteFile();
+        }
+        return FileSupport.ingestInto(src, new File(runDir, sub), destName);
     }
 
     private static File existingFile(File f) {
@@ -149,21 +240,221 @@ public class DiagnoseOrchestrator {
         report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(), "采集 thread dump", td.getAbsolutePath()));
     }
 
-    private boolean collectMemoryIfNeeded(DiagnoseRequest req, ResolvedTarget target, EvidencePack pack,
-                                          DiagnoseReport report) {
-        if (JvmEvidenceLocator.looksUsableHprof(pack.getHprof())) {
-            return false;
+    /**
+     * Collect or reuse dump1. One {@code --confirm} covers dump1 and dump2 in this command.
+     *
+     * @return always false (refusal throws via ConfirmGate)
+     */
+    private boolean collectDump1IfNeeded(DiagnoseRequest req, ResolvedTarget target, EvidencePack pack,
+                                         DiagnoseReport report) {
+        boolean live = req.isLiveCollect() && target.process != null
+                && discovery.pidExists(target.process.getPid());
+        boolean haveDump1 = JvmEvidenceLocator.looksUsableHprof(pack.getHprof());
+        boolean wantDump2 = live && req.getCompareAfterMs() != null;
+        boolean needDump1 = live && !haveDump1;
+        if (needDump1 || wantDump2) {
+            ConfirmGate.assertDumpAllowed(req.isConfirm());
         }
-        pack.setHprof(null);
-        if (!req.isLiveCollect() || target.process == null) {
-            return false;
+        if (needDump1) {
+            pack.setHprof(null);
+            JdkCollectors col = new JdkCollectors(req.getConfig());
+            File hprof = col.collectHeapDumpConfirmed(target.process, target.runDir);
+            String name = wantDump2
+                    ? "heap-1-" + TimeSupport.nowFileStamp() + ".hprof"
+                    : hprof.getName();
+            if (wantDump2 && !hprof.getName().equals(name)) {
+                File renamed = new File(hprof.getParentFile(), name);
+                if (hprof.renameTo(renamed)) {
+                    hprof = renamed;
+                }
+            }
+            pack.setHprof(hprof);
+            report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                    "经确认采集 heap dump" + (wantDump2 ? "（dump1）" : ""),
+                    hprof.getAbsolutePath()));
+        } else if (!haveDump1) {
+            pack.setHprof(null);
+        } else if (wantDump2 && pack.getHprof() != null) {
+            File src = pack.getHprof();
+            if (!src.getName().startsWith("heap-1-")) {
+                File renamed = ingest(src, target.runDir, "heap",
+                        "heap-1-" + stampName(src, ".hprof"));
+                pack.setHprof(renamed);
+            }
         }
-        ConfirmGate.assertDumpAllowed(req.isConfirm());
-        JdkCollectors col = new JdkCollectors(req.getConfig());
-        File hprof = col.collectHeapDump(target.process, target.runDir, true);
-        pack.setHprof(hprof);
-        report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(), "经确认采集 heap dump", hprof.getAbsolutePath()));
         return false;
+    }
+
+    private void collectDump2IfNeeded(DiagnoseRequest req, ResolvedTarget target, EvidencePack pack,
+                                      DiagnoseReport report) {
+        boolean live = req.isLiveCollect() && target.process != null;
+        if (!live || req.getCompareAfterMs() == null) {
+            return;
+        }
+        long wait = Math.max(0L, req.getCompareAfterMs().longValue());
+        if (wait > 0L) {
+            report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                    "等待 --compare-after " + wait + "ms 后采集 dump2", "compare"));
+            sleepQuietly(wait);
+        }
+        if (!discovery.pidExists(target.process.getPid())) {
+            report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                    "等待结束后进程已退出，未能采集 dump2；保留 dump1 并按单快照分析", "compare"));
+            return;
+        }
+        JdkCollectors col = new JdkCollectors(req.getConfig());
+        File dump1 = pack.getHprof();
+        File dump2 = col.collectHeapDumpConfirmed(target.process, target.runDir);
+        File named = new File(dump2.getParentFile(), "heap-2-" + TimeSupport.nowFileStamp() + ".hprof");
+        if (dump2.renameTo(named)) {
+            dump2 = named;
+        }
+        pack.setHprofPrev(dump1);
+        pack.setHprof(dump2);
+        report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                "经确认采集 heap dump（dump2）", dump2.getAbsolutePath()));
+    }
+
+    private static void sleepQuietly(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private JstatGcutilAnalyzer.SampleTrend runSampling(DiagnoseRequest req, ResolvedTarget target,
+                                                        EvidencePack pack, DiagnoseReport report) {
+        boolean live = req.isLiveCollect() && target.process != null
+                && discovery.pidExists(target.process.getPid());
+        if (!live) {
+            if (pack.getJstatSample() != null && pack.getJstatSample().isFile()) {
+                JstatGcutilAnalyzer.SampleTrend t = gcutilAnalyzer.analyze(
+                        FileSupport.readUtf8(pack.getJstatSample()));
+                if (t.available) {
+                    report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                            "复用已有 jstat 采样", pack.getJstatSample().getAbsolutePath()));
+                }
+                return t.available ? t : null;
+            }
+            return null;
+        }
+        JdkCollectors col = new JdkCollectors(req.getConfig());
+        int interval = req.getConfig().getSampleIntervalSeconds();
+        int count = req.getConfig().getSampleCount();
+        File raw = col.collectGcutilSample(target.process, target.runDir, interval, count);
+        if (raw == null) {
+            report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                    "未找到 jstat，跳过堆代采样", "samples"));
+            return null;
+        }
+        pack.setJstatSample(raw);
+        String text = FileSupport.readUtf8(raw);
+        JstatGcutilAnalyzer.SampleTrend t = gcutilAnalyzer.analyze(text);
+        report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                t.available ? "完成 jstat -gcutil 采样（" + interval + "s × " + count + "）"
+                        : "jstat 采样已写入但无法解析",
+                raw.getAbsolutePath()));
+        report.getEvidence().add(new EvidenceItem("EV-SAMPLE", "jstat_gcutil",
+                raw.getAbsolutePath(), t.available, t.judgment));
+        return t;
+    }
+
+    private AppLogLookback.Result runLogLookback(DiagnoseRequest req, ResolvedTarget target,
+                                                 EvidencePack pack, DiagnoseReport report) {
+        int minutes = req.getConfig().getLogLookbackMinutes();
+        File log = pack.getAppLog();
+        if (log == null) {
+            log = LogPathResolver.resolve(req.getAppLog(), target.meta, target.process);
+            if (log != null) {
+                log = ingest(log, target.runDir, "logs", log.getName());
+                pack.setAppLog(log);
+            }
+        }
+        AppLogLookback.Result r;
+        if (log == null || !log.isFile()) {
+            r = new AppLogLookback.Result();
+            r.lookbackMinutes = minutes;
+            r.unresolvedNote = "未解析到应用日志路径。请使用 --app-log <file> 后复跑本产品。";
+            r.summary = r.unresolvedNote;
+            report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                    "应用日志路径未解析", "log_lookback"));
+            return r;
+        }
+        String text = FileSupport.readUtf8(log);
+        r = logLookback.scan(text, System.currentTimeMillis(), minutes);
+        r.scannedFiles.add(log.getAbsolutePath());
+        File excerpt = new File(new File(target.runDir, "logs"), "lookback-hits.txt");
+        StringBuilder body = new StringBuilder();
+        body.append("# lookback ").append(minutes).append(" minutes\n");
+        body.append("# scanned ").append(log.getAbsolutePath()).append('\n');
+        body.append("# ").append(r.summary).append('\n');
+        if (r.hits.isEmpty()) {
+            body.append("(no hits in window)\n");
+        } else {
+            for (AppLogLookback.Hit h : r.hits) {
+                body.append("---\n").append(h.excerpt).append('\n');
+            }
+        }
+        FileSupport.writeUtf8(excerpt, body.toString());
+        report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                r.hits.isEmpty() ? "日志倒查：窗口内无命中" : "日志倒查：命中 " + r.hits.size() + " 处",
+                excerpt.getAbsolutePath()));
+        report.getEvidence().add(new EvidenceItem("EV-LOG", "app_log_lookback",
+                excerpt.getAbsolutePath(), true, r.summary));
+        return r;
+    }
+
+    private HprofComparer.CompareResult runCompare(DiagnoseRequest req, EvidencePack pack, DiagnoseReport report) {
+        File newer = pack.getHprof();
+        File older = pack.getHprofPrev();
+        if (older == null && newer == null) {
+            return null;
+        }
+        if (older == null) {
+            if (req.getCompareAfterMs() == null && req.getHprofPrev() == null) {
+                return null;
+            }
+        }
+        HprofParser.HprofSummary sOld = null;
+        HprofParser.HprofSummary sNew = null;
+        if (older != null && JvmEvidenceLocator.looksUsableHprof(older)) {
+            try {
+                sOld = hprofParser.parse(older);
+            } catch (JfaException e) {
+                report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                        "dump1 无法解析: " + e.getMessage(), "compare"));
+            }
+        }
+        if (newer != null && JvmEvidenceLocator.looksUsableHprof(newer)) {
+            try {
+                sNew = hprofParser.parse(newer);
+            } catch (JfaException e) {
+                report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                        "dump2 无法解析: " + e.getMessage(), "compare"));
+            }
+        }
+        if (sOld == null && sNew == null) {
+            return null;
+        }
+        List<String> prior = new ArrayList<String>();
+        if (sOld != null && sOld.primaryHolder != null) {
+            prior.add(sOld.primaryHolder);
+        }
+        HprofComparer.CompareResult cmp = hprofComparer.compare(sOld, sNew,
+                req.getConfig().getCompareTopN(), prior);
+        try {
+            File json = new File(new File(pack.getEvidenceDir(), "heap"), "compare-summary.json");
+            FileSupport.writeUtf8(json, JsonSupport.mapper().writerWithDefaultPrettyPrinter()
+                    .writeValueAsString(cmp.toJsonMap()));
+            report.getEvidence().add(new EvidenceItem("EV-CMP", "heap_compare",
+                    json.getAbsolutePath(), true, cmp.judgment));
+        } catch (Exception e) {
+            throw new JfaException(ErrorCode.E_IO_REPORT, "写入 compare-summary.json 失败", e);
+        }
+        report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                "完成堆对比：" + cmp.judgment, "compare"));
+        return cmp;
     }
 
     private DeadlockEngine.ThreadAnalysis analyzeThread(DiagnoseRequest req, ResolvedTarget target,
@@ -178,12 +469,7 @@ public class DiagnoseOrchestrator {
                 sec.getQualification().put("deadlock_found", false);
                 sec.getMissingEvidence().add("历史 thread dump（进程已死且无落盘 dump，无法还原死锁现场）");
                 sec.getNextMinimalActions().add(
-                        "下次在进程假死/OOM 脚本中调用 jstack 或 jcmd <pid> Thread.print 写入 threads/ 目录后复跑 --type thread");
-                sec.getNextMinimalActions().add("可选：jfa help config 中 OnOutOfMemoryError 示例含 jstack（非诊断前提）");
-                sec.getRecommendations().getOps().add(new Recommendation("REC-OPS-01",
-                        "在进程假死告警脚本中增加 jstack/jcmd Thread.print 落盘。",
-                        "进程一旦被杀将无法还原死锁现场。",
-                        "演练杀进程前确认 threads/ 目录有新文件。"));
+                        "jfa collect threaddump --pid <pid> 或传入 --thread-dump 后复跑 --type thread");
                 report.getSections().add(sec);
                 report.getEvidence().add(new EvidenceItem("EV-TD-MISS", "thread_dump", "", false, "缺失"));
                 return null;
@@ -199,7 +485,7 @@ public class DiagnoseOrchestrator {
                 pack.getThreadDump().getAbsolutePath(), true,
                 ta.isDeadlockFound() ? "死锁检出" : "未发现死锁"));
         sec.setStatus("ok");
-        sec.setConfidence(ta.isDeadlockFound() ? Confidence.HIGH.wireName() : Confidence.HIGH.wireName());
+        sec.setConfidence(Confidence.HIGH.wireName());
         sec.getQualification().put("deadlock_found", ta.isDeadlockFound());
         sec.getQualification().put("deadlock_count", ta.getDeadlockCount());
         if (ta.getJvmDeadlockDescription() != null) {
@@ -208,18 +494,6 @@ public class DiagnoseOrchestrator {
         sec.setSuspects(ta.getSuspects());
         if (ta.isDeadlockFound()) {
             addDeadlockRecs(sec, ta);
-        } else {
-            if (ta.getBlockedCount() > 0) {
-                Map<String, Object> hint = new LinkedHashMap<String, Object>();
-                hint.put("id", "SUS-T-RISK");
-                hint.put("kind", "risk_hint");
-                hint.put("detail", "高阻塞线程 Top：" + ta.getHotBlocked() + " ——风险提示，非故障定性");
-                sec.getSuspects().add(hint);
-            }
-            sec.getRecommendations().getOps().add(new Recommendation("REC-OPS-T1",
-                    "无死锁时无需硬性改锁顺序；可将本次 dump 作为基线保留。",
-                    "未发现 JVM 报告的 Java 级死锁。",
-                    "若再现卡顿，立即 jfa collect threaddump 后复跑 --type thread。"));
         }
         report.getSections().add(sec);
         report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
@@ -241,10 +515,6 @@ public class DiagnoseOrchestrator {
                 "对锁使用 tryLock(timeout) 并失败降级/重试；缩小 synchronized 临界区。",
                 "缩短无限等待窗口，降低第三方库或嵌套锁放大死锁的概率。",
                 "注入延迟后断言超时分支被触发且无线程永久 BLOCKED。"));
-        sec.getRecommendations().getOps().add(new Recommendation("REC-OPS-01",
-                "在进程假死告警脚本中增加 jstack/jcmd Thread.print 落盘。",
-                "进程一旦被杀将无法还原死锁现场。",
-                "演练杀进程前确认 threads/ 目录有新文件。"));
     }
 
     private void addMemorySection(DiagnoseReport report, OomEngine.MemoryAnalysis memory, EvidencePack pack) {
@@ -269,7 +539,8 @@ public class DiagnoseOrchestrator {
             sec.getQualification().put("complexity", memory.complexity);
             sec.getQualification().put("complexity_id", memory.complexityId);
         }
-        if (memory.singleDumpLimitation != null && memory.level == EvidenceLevel.E3) {
+        if (memory.singleDumpLimitation != null && memory.level == EvidenceLevel.E3
+                && pack.getHprofPrev() == null) {
             sec.getQualification().put("evidence_limit", memory.singleDumpLimitation);
         }
         sec.setSuspects(memory.suspects);
@@ -288,6 +559,10 @@ public class DiagnoseOrchestrator {
                     pack.getHprof().getAbsolutePath(), !memory.hprofInvalid,
                     memory.hprofInvalid ? "无效已降级" : "E3"));
         }
+        if (pack.getHprofPrev() != null) {
+            report.getEvidence().add(new EvidenceItem("EV-HPROF-1", "hprof",
+                    pack.getHprofPrev().getAbsolutePath(), true, "dump1"));
+        }
         if (pack.getGcLog() != null) {
             report.getEvidence().add(new EvidenceItem("EV-GC", "gc_log",
                     pack.getGcLog().getAbsolutePath(), true, "趋势"));
@@ -304,12 +579,83 @@ public class DiagnoseOrchestrator {
         }
     }
 
+    private void addSampleSection(DiagnoseReport report, JstatGcutilAnalyzer.SampleTrend sample, EvidencePack pack) {
+        ReportSection sec = new ReportSection();
+        sec.setType("sample");
+        sec.setStatus("ok");
+        sec.setNote(sample.summary);
+        sec.getQualification().put("judgment", sample.judgment);
+        sec.getQualification().put("summary", sample.summary);
+        List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
+        for (JstatGcutilAnalyzer.SampleRow row : sample.rows) {
+            Map<String, Object> m = new LinkedHashMap<String, Object>();
+            m.put("S0", row.s0);
+            m.put("S1", row.s1);
+            m.put("E", row.eden);
+            m.put("O", row.old);
+            if (!Double.isNaN(row.meta)) {
+                m.put("M", row.meta);
+            }
+            m.put("YGC", row.ygc);
+            m.put("FGC", row.fgc);
+            rows.add(m);
+        }
+        sec.getQualification().put("rows", rows);
+        if (pack.getJstatSample() != null) {
+            sec.getQualification().put("raw_file", pack.getJstatSample().getAbsolutePath());
+        }
+        report.getSections().add(sec);
+    }
+
+    private void addLogSection(DiagnoseReport report, AppLogLookback.Result lookback) {
+        ReportSection sec = new ReportSection();
+        sec.setType("log_lookback");
+        sec.setStatus(lookback.unresolvedNote != null ? "degraded" : "ok");
+        sec.setNote(lookback.judgmentLine());
+        sec.getQualification().put("lookback_minutes", lookback.lookbackMinutes);
+        sec.getQualification().put("summary", lookback.judgmentLine());
+        sec.getQualification().put("had_timestamps", lookback.hadTimestamps);
+        sec.getQualification().put("oom_in_window", lookback.oomInWindow);
+        sec.getQualification().put("scanned_files", lookback.scannedFiles);
+        List<Map<String, Object>> hits = new ArrayList<Map<String, Object>>();
+        for (AppLogLookback.Hit h : lookback.hits) {
+            Map<String, Object> m = new LinkedHashMap<String, Object>();
+            m.put("oom", h.oom);
+            m.put("excerpt", h.excerpt);
+            hits.add(m);
+        }
+        sec.getQualification().put("hits", hits);
+        if (lookback.unresolvedNote != null) {
+            sec.getNextMinimalActions().add("jfa diagnose ... --app-log <file>");
+        }
+        report.getSections().add(sec);
+    }
+
+    private void addCompareSection(DiagnoseReport report, HprofComparer.CompareResult compare, EvidencePack pack) {
+        ReportSection sec = new ReportSection();
+        sec.setType("heap_compare");
+        sec.setStatus("ok");
+        sec.setNote(compare.summary);
+        sec.getQualification().putAll(compare.toJsonMap());
+        if (pack.getHprofPrev() != null) {
+            sec.getQualification().put("dump1", pack.getHprofPrev().getAbsolutePath());
+        }
+        if (pack.getHprof() != null) {
+            sec.getQualification().put("dump2", pack.getHprof().getAbsolutePath());
+        }
+        report.getSections().add(sec);
+    }
+
     private void finalizeSummary(DiagnoseReport report, AnalysisMode mode,
                                  DeadlockEngine.ThreadAnalysis thread,
-                                 OomEngine.MemoryAnalysis memory) {
+                                 OomEngine.MemoryAnalysis memory,
+                                 JstatGcutilAnalyzer.SampleTrend sample,
+                                 AppLogLookback.Result lookback,
+                                 HprofComparer.CompareResult compare) {
         boolean deadlock = thread != null && thread.isDeadlockFound();
         boolean oom = memory != null && memory.oomConfirmed;
         boolean e3 = memory != null && memory.level == EvidenceLevel.E3;
+        boolean leakLean = compare != null && HprofComparer.LEAK_OR_RETENTION.equals(compare.judgment);
         List<String> kinds = new ArrayList<String>();
         if (deadlock) {
             kinds.add("deadlock");
@@ -327,7 +673,16 @@ public class DiagnoseOrchestrator {
             report.getSummary().getHealth().setHeapOomEvidenceFound(oom || e3 && memory.oomConfirmed);
             report.getSummary().getHealth().getRiskHints().addAll(memory.riskHints);
         }
-        boolean health = !deadlock && !oom;
+        if (sample != null && sample.available) {
+            report.getSummary().getHealth().getRiskHints().add("采样: " + sample.summary);
+        }
+        if (lookback != null && lookback.oomInWindow) {
+            report.getSummary().getHealth().getRiskHints().add("日志窗口内存在 OutOfMemoryError");
+        }
+        if (compare != null) {
+            report.getSummary().getHealth().getRiskHints().add("堆对比: " + compare.summary);
+        }
+        boolean health = !deadlock && !oom && !leakLean;
         report.setReportMode(health ? ReportMode.HEALTH_CHECK.wireName() : ReportMode.FAULT.wireName());
         if (health) {
             report.getSummary().setFaultKindsNote("健康体检且无故障时可为 []，并由 one_line / health 字段表达否定结论");
@@ -341,21 +696,25 @@ public class DiagnoseOrchestrator {
                 }
                 one.append("未发现堆 OOM 证据");
             }
+            if (sample != null && sample.available) {
+                one.append("；采样").append(judgmentZh(sample.judgment));
+            }
+            if (lookback != null) {
+                one.append("；").append(lookback.hits.isEmpty() && lookback.unresolvedNote == null
+                        ? "日志窗口无命中" : lookback.judgmentLine());
+            }
+            if (compare != null) {
+                one.append("；堆对比 ").append(judgmentZh(compare.judgment));
+            }
             if (memory != null && memory.level == EvidenceLevel.E3 && !oom) {
                 report.setReportMode(ReportMode.FAULT.wireName());
                 report.getSummary().setOneLine(memory.oneLineFault);
                 report.getSummary().setOverallConfidence(Confidence.HIGH.wireName());
             } else {
                 report.getSummary().setOneLine(one.toString() + "。");
-                report.getSummary().setOverallConfidence(
-                        memory != null && memory.level == EvidenceLevel.E2
-                                ? Confidence.MEDIUM.wireName()
-                                : Confidence.MEDIUM.wireName());
+                report.getSummary().setOverallConfidence(Confidence.MEDIUM.wireName());
                 if (memory != null && memory.level == EvidenceLevel.E0) {
                     report.getSummary().setOverallConfidence(Confidence.LOW.wireName());
-                }
-                if (thread != null && thread.isDeadlockFound()) {
-                    report.getSummary().setOverallConfidence(Confidence.HIGH.wireName());
                 }
             }
         } else {
@@ -369,9 +728,18 @@ public class DiagnoseOrchestrator {
                 }
                 one.append(memory.oneLineFault);
             }
+            if (lookback != null && lookback.oomInWindow) {
+                one.append("；日志窗口确认 OOM");
+            }
+            if (sample != null && sample.available) {
+                one.append("；采样").append(judgmentZh(sample.judgment));
+            }
+            if (compare != null) {
+                one.append("；堆对比 ").append(judgmentZh(compare.judgment));
+            }
             report.getSummary().setOneLine(one.toString());
             report.getSummary().setOverallConfidence(
-                    deadlock || e3 ? Confidence.HIGH.wireName() : Confidence.MEDIUM.wireName());
+                    deadlock || e3 || leakLean ? Confidence.HIGH.wireName() : Confidence.MEDIUM.wireName());
         }
         if (memory != null && memory.level == EvidenceLevel.E1) {
             report.getSummary().setOverallConfidence(Confidence.LOW.wireName());
@@ -379,6 +747,22 @@ public class DiagnoseOrchestrator {
         if (memory != null && memory.level == EvidenceLevel.E3) {
             report.getSummary().getHealth().setHeapOomEvidenceFound(true);
         }
+    }
+
+    static String judgmentZh(String j) {
+        if ("climbing_old_no_reclaim".equals(j) || HprofComparer.LEAK_OR_RETENTION.equals(j)) {
+            return "倾向泄漏/保留";
+        }
+        if ("peak_jitter".equals(j) || HprofComparer.PEAK_OR_JITTER.equals(j)) {
+            return "高峰/抖动";
+        }
+        if ("stable".equals(j) || HprofComparer.STABLE_IN_WINDOW.equals(j)) {
+            return "窗口内稳定";
+        }
+        if (HprofComparer.SINGLE_SNAPSHOT_ONLY.equals(j)) {
+            return "仅单快照";
+        }
+        return j == null ? "" : j;
     }
 
     private DiagnoseResult write(DiagnoseReport report, DiagnoseRequest req, ResolvedTarget target) {
@@ -430,8 +814,8 @@ public class DiagnoseOrchestrator {
     }
 
     /**
-     * Healthy reports serialize only conclusion/summary + collection timeline.
-     * Fault reports keep full chapters. Disclaimer is never included.
+     * Healthy reports serialize conclusion/summary + timeline + evidence (run dir)
+     * plus product sample/log/compare sections. Disclaimer is never included.
      */
     private static DiagnoseReport jsonView(DiagnoseReport report) {
         if (!ReportMode.HEALTH_CHECK.wireName().equals(report.getReportMode())) {
@@ -446,8 +830,17 @@ public class DiagnoseOrchestrator {
         slim.setTarget(report.getTarget());
         slim.setSummary(report.getSummary());
         slim.setTimeline(report.getTimeline());
-        slim.setEvidence(null);
-        slim.setSections(null);
+        slim.setEvidence(report.getEvidence());
+        List<ReportSection> keep = new ArrayList<ReportSection>();
+        if (report.getSections() != null) {
+            for (ReportSection s : report.getSections()) {
+                if ("sample".equals(s.getType()) || "log_lookback".equals(s.getType())
+                        || "heap_compare".equals(s.getType())) {
+                    keep.add(s);
+                }
+            }
+        }
+        slim.setSections(keep.isEmpty() ? null : keep);
         return slim;
     }
 
@@ -490,8 +883,7 @@ public class DiagnoseOrchestrator {
             t.pid = req.getPid();
             t.mainClass = t.process.getMainClassOrJar();
             t.serviceId = "pid-" + req.getPid();
-            t.evidenceDir = req.getEvidenceDir() != null ? req.getEvidenceDir()
-                    : req.getConfig().serviceDir(t.serviceId);
+            t.evidenceDir = req.getEvidenceDir();
         } else if (req.getEvidenceDir() != null) {
             t.evidenceDir = req.getEvidenceDir();
             File meta = new File(t.evidenceDir, "meta.json");
@@ -507,7 +899,7 @@ public class DiagnoseOrchestrator {
             }
         } else {
             t.serviceId = "adhoc";
-            t.evidenceDir = req.getOutDir() != null ? req.getOutDir() : req.getConfig().serviceDir("adhoc");
+            t.evidenceDir = req.getEvidenceDir();
         }
         if (req.getEvidenceDir() != null) {
             t.evidenceDir = req.getEvidenceDir();

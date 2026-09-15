@@ -13,7 +13,7 @@ jfa discover
 jfa diagnose --pid <pid>
 ```
 
-无 OOM / 无死锁时，默认全量诊断即为健康体检（内存 + 线程），结论为否定故障 + 可选风险提示。
+无 OOM / 无死锁时，默认全量诊断即为健康体检（内存 + 线程），结论为否定故障 + 采样/日志窗口判读。产品自己采样、倒查日志、对比 hprof。
 
 ## 三种分析模式
 
@@ -28,7 +28,9 @@ jfa diagnose --pid <pid>
 ```bash
 jfa analyze --evidence-dir /var/jfa/order-svc --type auto
 jfa analyze --hprof /path/a.hprof --gc-log /path/gc.log --type memory
+jfa analyze --hprof /path/newer.hprof --hprof-prev /path/older.hprof --type memory
 jfa analyze --thread-dump /path/td.txt --type thread
+jfa diagnose --pid <pid> --type memory --compare-after 15m --confirm
 ```
 
 ## 构建（JDK 8）
@@ -54,7 +56,7 @@ jfa config recommend
 ## 模块
 
 - `jfa-common` — 错误码、报告 schema 2.1、配置
-- `jfa-core` — 发现/登记/采集/死锁引擎/OOM E0–E3/报告
+- `jfa-core` — 发现/登记/采集/死锁引擎/OOM E0–E3/采样/日志倒查/堆对比/报告
 - `jfa-cli` — Linux CLI
 
 ## 文档

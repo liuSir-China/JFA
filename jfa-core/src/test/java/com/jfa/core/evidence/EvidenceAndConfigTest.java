@@ -43,31 +43,29 @@ public class EvidenceAndConfigTest {
     @Test
     public void evidenceGcDeletesExpiredOnly() throws Exception {
         JfaConfig cfg = JfaConfig.defaults();
-        cfg.setEvidenceRoot(tmp.getRoot());
-        File svc = new File(tmp.getRoot(), "svc1/heap");
-        svc.mkdirs();
-        File oldF = new File(svc, "old.hprof");
-        File newF = new File(svc, "new.hprof");
-        Assert.assertTrue(oldF.createNewFile());
+        File reportfile = tmp.newFolder("reportfile");
+        cfg.setReportfileRoot(reportfile);
+        File pidDir = new File(new File(reportfile, "pid_1"), "20200101-000000");
+        File heap = new File(new File(pidDir, "heap"), "old.hprof");
+        heap.getParentFile().mkdirs();
+        File newRun = new File(new File(reportfile, "pid_1"), "20990101-000000");
+        File newF = new File(new File(newRun, "heap"), "new.hprof");
+        newF.getParentFile().mkdirs();
+        Assert.assertTrue(heap.createNewFile());
         Assert.assertTrue(newF.createNewFile());
-        oldF.setLastModified(System.currentTimeMillis() - 10L * 24 * 3600 * 1000);
+        heap.setLastModified(System.currentTimeMillis() - 10L * 24 * 3600 * 1000);
         newF.setLastModified(System.currentTimeMillis());
-        File meta = new File(tmp.getRoot(), "svc1/meta.json");
-        String evidenceDir = new File(tmp.getRoot(), "svc1").getAbsolutePath().replace('\\', '/');
-        java.nio.file.Files.write(meta.toPath(),
-                ("{\"service_id\":\"svc1\",\"paths\":{\"evidence_dir\":\""
-                        + evidenceDir + "\"},\"lifecycle_managed_by_jfa\":false}").getBytes("UTF-8"));
-        EvidenceGc.GcReport r = new EvidenceGc().gc(cfg, "svc1", false);
+        EvidenceGc.GcReport r = new EvidenceGc().gc(cfg, null, false);
         Assert.assertTrue(r.deleted.toString().contains("old.hprof"));
-        Assert.assertFalse(newF.exists() && r.deleted.toString().contains("new.hprof") && !newF.exists());
         Assert.assertTrue(newF.exists());
-        Assert.assertFalse(oldF.exists());
+        Assert.assertFalse(heap.exists());
     }
 
     @Test
     public void evidenceGcDoesNotDeleteOutsideManagedDirs() throws Exception {
         JfaConfig cfg = JfaConfig.defaults();
-        cfg.setEvidenceRoot(tmp.getRoot());
+        File reportfile = tmp.newFolder("reportfile");
+        cfg.setReportfileRoot(reportfile);
         File outside = new File(tmp.getRoot(), "app-dumps/java_pid1.hprof");
         outside.getParentFile().mkdirs();
         Assert.assertTrue(outside.createNewFile());

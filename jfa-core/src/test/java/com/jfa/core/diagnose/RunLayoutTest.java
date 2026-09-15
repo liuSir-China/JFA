@@ -65,6 +65,18 @@ public class RunLayoutTest {
     }
 
     @Test
+    public void ingestCopiesOrLinksIntoDestDir() throws Exception {
+        File src = tmp.newFile("src.txt");
+        java.nio.file.Files.write(src.toPath(), "hello".getBytes("UTF-8"));
+        File destDir = tmp.newFolder("run", "heap");
+        File copied = com.jfa.core.io.FileSupport.ingestInto(src, destDir, "src.txt");
+        Assert.assertTrue(copied.isFile());
+        Assert.assertTrue(copied.getAbsolutePath().contains("heap"));
+        Assert.assertEquals("hello", new String(java.nio.file.Files.readAllBytes(copied.toPath()), "UTF-8"));
+        Assert.assertTrue(src.isFile());
+    }
+
+    @Test
     public void outOverrideDoesNotUseCoverFile() throws Exception {
         JfaConfig cfg = JfaConfig.defaults();
         cfg.setCoverFile(true);

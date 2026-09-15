@@ -16,12 +16,17 @@ import java.util.Properties;
  * interactive y/n or {@code --confirm}; trading-hours knobs are not used.
  */
 public class JfaConfig {
-    private File evidenceRoot;
     private File reportfileRoot;
+    private File registryRoot;
     private int retentionDays = 7;
     private long minFreeBytes = 1L * 1024 * 1024 * 1024;
     private double minFreeRatio = 0.05d;
     private boolean coverFile = true;
+    private int sampleIntervalSeconds = 5;
+    private int sampleCount = 8;
+    private int logLookbackMinutes = 10;
+    private int compareTopN = 20;
+    private String compareAfter;
     private File configFile;
 
     public static JfaConfig load(File configFile) {
@@ -46,10 +51,7 @@ public class JfaConfig {
     }
 
     public static JfaConfig defaults() {
-        JfaConfig cfg = new JfaConfig();
-        File home = new File(System.getProperty("user.home"), ".jfa");
-        cfg.evidenceRoot = new File(home, "evidence");
-        return cfg;
+        return new JfaConfig();
     }
 
     private void applyFile(File file) {
@@ -70,18 +72,26 @@ public class JfaConfig {
                 }
             }
         }
-        String root = p.getProperty("evidence.root");
-        if (root != null && !root.trim().isEmpty()) {
-            this.evidenceRoot = new File(expand(root.trim()));
-        }
         String reportRoot = p.getProperty("reportfile.root");
         if (reportRoot != null && !reportRoot.trim().isEmpty()) {
             this.reportfileRoot = new File(expand(reportRoot.trim()));
+        }
+        String regRoot = p.getProperty("registry.root");
+        if (regRoot != null && !regRoot.trim().isEmpty()) {
+            this.registryRoot = new File(expand(regRoot.trim()));
         }
         this.retentionDays = intProp(p, "retention.days", retentionDays);
         this.minFreeBytes = longProp(p, "min.free.bytes", minFreeBytes);
         this.minFreeRatio = doubleProp(p, "min.free.ratio", minFreeRatio);
         this.coverFile = boolProp(p, "cover.file", coverFile);
+        this.sampleIntervalSeconds = intProp(p, "sample.interval.seconds", sampleIntervalSeconds);
+        this.sampleCount = intProp(p, "sample.count", sampleCount);
+        this.logLookbackMinutes = intProp(p, "log.lookback.minutes", logLookbackMinutes);
+        this.compareTopN = intProp(p, "compare.top.n", compareTopN);
+        String after = p.getProperty("compare.after");
+        if (after != null && !after.trim().isEmpty()) {
+            this.compareAfter = after.trim();
+        }
     }
 
     private static File firstExisting(String... paths) {
@@ -144,14 +154,6 @@ public class JfaConfig {
         return Boolean.parseBoolean(v.trim());
     }
 
-    public File getEvidenceRoot() {
-        return evidenceRoot;
-    }
-
-    public void setEvidenceRoot(File evidenceRoot) {
-        this.evidenceRoot = evidenceRoot;
-    }
-
     /**
      * Output root for diagnose/analyze runs. Defaults to {@code <install>/reportfile}.
      */
@@ -164,6 +166,21 @@ public class JfaConfig {
 
     public void setReportfileRoot(File reportfileRoot) {
         this.reportfileRoot = reportfileRoot;
+    }
+
+    /**
+     * Service registry root (meta.json only). Defaults to {@code <install>/registry}.
+     * Diagnose/analyze evidence is never written here.
+     */
+    public File getRegistryRoot() {
+        if (registryRoot != null) {
+            return registryRoot.getAbsoluteFile();
+        }
+        return new File(InstallHome.detect(configFile), "registry").getAbsoluteFile();
+    }
+
+    public void setRegistryRoot(File registryRoot) {
+        this.registryRoot = registryRoot;
     }
 
     public int getRetentionDays() {
@@ -190,11 +207,51 @@ public class JfaConfig {
         this.coverFile = coverFile;
     }
 
+    public int getSampleIntervalSeconds() {
+        return sampleIntervalSeconds;
+    }
+
+    public void setSampleIntervalSeconds(int sampleIntervalSeconds) {
+        this.sampleIntervalSeconds = sampleIntervalSeconds;
+    }
+
+    public int getSampleCount() {
+        return sampleCount;
+    }
+
+    public void setSampleCount(int sampleCount) {
+        this.sampleCount = sampleCount;
+    }
+
+    public int getLogLookbackMinutes() {
+        return logLookbackMinutes;
+    }
+
+    public void setLogLookbackMinutes(int logLookbackMinutes) {
+        this.logLookbackMinutes = logLookbackMinutes;
+    }
+
+    public int getCompareTopN() {
+        return compareTopN;
+    }
+
+    public void setCompareTopN(int compareTopN) {
+        this.compareTopN = compareTopN;
+    }
+
+    public String getCompareAfter() {
+        return compareAfter;
+    }
+
+    public void setCompareAfter(String compareAfter) {
+        this.compareAfter = compareAfter;
+    }
+
     public File getConfigFile() {
         return configFile;
     }
 
     public File serviceDir(String serviceId) {
-        return new File(evidenceRoot, serviceId);
+        return new File(getRegistryRoot(), serviceId);
     }
 }

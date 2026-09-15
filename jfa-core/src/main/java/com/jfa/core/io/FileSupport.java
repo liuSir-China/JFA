@@ -11,6 +11,7 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
@@ -211,5 +212,70 @@ public final class FileSupport {
             }
         }
         return best;
+    }
+
+    /**
+     * Copy {@code src} into {@code destDir} so a diagnose run directory is self-contained.
+     * Tries a hard link first (same filesystem, no extra disk); falls back to a byte copy.
+     * If {@code src} is already the destination file, it is returned unchanged.
+     */
+    public static File ingestInto(File src, File destDir, String destName) {
+        if (src == null || !src.isFile()) {
+            return src;
+        }
+        mkdirs(destDir);
+        String name = destName == null || destName.trim().isEmpty() ? src.getName() : destName;
+        File dest = new File(destDir, name);
+        try {
+            if (src.getCanonicalFile().equals(dest.getCanonicalFile())) {
+                return dest.getAbsoluteFile();
+            }
+        } catch (IOException ignored) {
+            // compare paths loosely below
+        }
+        if (dest.exists() && dest.length() == src.length()) {
+            try {
+                if (dest.getCanonicalFile().equals(src.getCanonicalFile())) {
+                    return dest.getAbsoluteFile();
+                }
+            } catch (IOException ignored) {
+                // copy/replace
+            }
+        }
+        try {
+            Files.deleteIfExists(dest.toPath());
+        } catch (IOException ignored) {
+            // replace via copy
+        }
+        try {
+            Files.createLink(dest.toPath(), src.toPath());
+            return dest.getAbsoluteFile();
+        } catch (Exception ignored) {
+            // different filesystem or unsupported; fall through to copy
+        }
+        try {
+            Files.copy(src.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            return dest.getAbsoluteFile();
+        } catch (IOException e) {
+            throw new JfaException(ErrorCode.E_IO_EVIDENCE,
+                    "无法将证据复制到运行目录: " + src + " → " + dest, e);
+        }
+    }
+
+    public static boolean isUnder(File file, File ancestor) {
+        if (file == null || ancestor == null) {
+            return false;
+        }
+        try {
+            String child = file.getCanonicalFile().getAbsolutePath();
+            String root = ancestor.getCanonicalFile().getAbsolutePath();
+            if (!root.endsWith(File.separator)) {
+                root = root + File.separator;
+            }
+            return child.equals(ancestor.getCanonicalFile().getAbsolutePath())
+                    || child.startsWith(root);
+        } catch (IOException e) {
+            return false;
+        }
     }
 }
