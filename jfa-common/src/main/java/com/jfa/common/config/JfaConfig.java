@@ -2,6 +2,7 @@ package com.jfa.common.config;
 
 import com.jfa.common.ErrorCode;
 import com.jfa.common.JfaException;
+import com.jfa.common.io.InstallHome;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -11,16 +12,16 @@ import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 
 /**
- * Local JFA configuration. Defaults keep data on-box and require confirm for dumps.
+ * Local JFA configuration. Defaults keep data on-box. Dangerous collects use
+ * interactive y/n or {@code --confirm}; trading-hours knobs are not used.
  */
 public class JfaConfig {
     private File evidenceRoot;
+    private File reportfileRoot;
     private int retentionDays = 7;
     private long minFreeBytes = 1L * 1024 * 1024 * 1024;
     private double minFreeRatio = 0.05d;
-    private boolean requireConfirm = true;
-    private String tradingHoursPolicy = "force_confirm";
-    private String tradingHours = "";
+    private boolean coverFile = true;
     private boolean outboundEnabled = false;
     private File configFile;
 
@@ -74,12 +75,14 @@ public class JfaConfig {
         if (root != null && !root.trim().isEmpty()) {
             this.evidenceRoot = new File(expand(root.trim()));
         }
+        String reportRoot = p.getProperty("reportfile.root");
+        if (reportRoot != null && !reportRoot.trim().isEmpty()) {
+            this.reportfileRoot = new File(expand(reportRoot.trim()));
+        }
         this.retentionDays = intProp(p, "retention.days", retentionDays);
         this.minFreeBytes = longProp(p, "min.free.bytes", minFreeBytes);
         this.minFreeRatio = doubleProp(p, "min.free.ratio", minFreeRatio);
-        this.requireConfirm = boolProp(p, "require.confirm", requireConfirm);
-        this.tradingHoursPolicy = p.getProperty("trading.hours.policy", tradingHoursPolicy).trim();
-        this.tradingHours = p.getProperty("trading.hours", tradingHours).trim();
+        this.coverFile = boolProp(p, "cover.file", coverFile);
         this.outboundEnabled = boolProp(p, "outbound.enabled", outboundEnabled);
     }
 
@@ -99,10 +102,14 @@ public class JfaConfig {
         return null;
     }
 
-    private static String expand(String value) {
+    private String expand(String value) {
         String home = System.getProperty("user.home");
         if (home != null) {
             value = value.replace("${user.home}", home);
+        }
+        File install = InstallHome.detect(configFile);
+        if (install != null) {
+            value = value.replace("${jfa.install.home}", install.getAbsolutePath());
         }
         return value;
     }
@@ -147,8 +154,26 @@ public class JfaConfig {
         this.evidenceRoot = evidenceRoot;
     }
 
+    /**
+     * Output root for diagnose/analyze runs. Defaults to {@code <install>/reportfile}.
+     */
+    public File getReportfileRoot() {
+        if (reportfileRoot != null) {
+            return reportfileRoot.getAbsoluteFile();
+        }
+        return new File(InstallHome.detect(configFile), "reportfile").getAbsoluteFile();
+    }
+
+    public void setReportfileRoot(File reportfileRoot) {
+        this.reportfileRoot = reportfileRoot;
+    }
+
     public int getRetentionDays() {
         return retentionDays;
+    }
+
+    public void setRetentionDays(int retentionDays) {
+        this.retentionDays = retentionDays;
     }
 
     public long getMinFreeBytes() {
@@ -159,16 +184,12 @@ public class JfaConfig {
         return minFreeRatio;
     }
 
-    public boolean isRequireConfirm() {
-        return requireConfirm;
+    public boolean isCoverFile() {
+        return coverFile;
     }
 
-    public String getTradingHoursPolicy() {
-        return tradingHoursPolicy;
-    }
-
-    public String getTradingHours() {
-        return tradingHours;
+    public void setCoverFile(boolean coverFile) {
+        this.coverFile = coverFile;
     }
 
     public boolean isOutboundEnabled() {

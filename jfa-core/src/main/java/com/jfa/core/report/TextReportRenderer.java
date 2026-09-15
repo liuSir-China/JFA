@@ -1,6 +1,5 @@
 package com.jfa.core.report;
 
-import com.jfa.common.JfaConstants;
 import com.jfa.common.ReportMode;
 import com.jfa.common.model.report.DiagnoseReport;
 import com.jfa.common.model.report.EvidenceItem;
@@ -48,7 +47,9 @@ public class TextReportRenderer {
                 && !report.getSummary().getFaultKinds().isEmpty()) {
             sb.append("- 故障类型：").append(report.getSummary().getFaultKinds()).append('\n');
         }
-        appendSectionQual(sb, report);
+        if (!health) {
+            appendSectionQual(sb, report);
+        }
 
         if (health) {
             sb.append("\n## 2. 采集时间线\n");
@@ -67,6 +68,10 @@ public class TextReportRenderer {
             }
         }
 
+        if (health) {
+            return sb.toString();
+        }
+
         sb.append("\n## 3. 证据清单与置信度\n");
         if (report.getEvidence() == null || report.getEvidence().isEmpty()) {
             sb.append("- （无有效证据文件）\n");
@@ -81,35 +86,21 @@ public class TextReportRenderer {
             }
         }
 
-        if (health) {
-            sb.append("\n## 4. 基线与风险提示（非根因）\n");
-            List<String> hints = report.getSummary() == null || report.getSummary().getHealth() == null
-                    ? null : report.getSummary().getHealth().getRiskHints();
-            if (hints == null || hints.isEmpty()) {
-                sb.append("- 无额外风险提示\n");
-            } else {
-                for (String h : hints) {
-                    sb.append("- 风险提示：").append(h).append('\n');
+        sb.append("\n## 4. 嫌疑点\n");
+        boolean any = false;
+        if (report.getSections() != null) {
+            for (ReportSection sec : report.getSections()) {
+                if (sec.getSuspects() == null) {
+                    continue;
+                }
+                for (Map<String, Object> s : sec.getSuspects()) {
+                    any = true;
+                    sb.append("- ").append(s).append('\n');
                 }
             }
-            sb.append("- 禁止解读为：「已确定 XX 泄漏 / XX 死锁」\n");
-        } else {
-            sb.append("\n## 4. 嫌疑点\n");
-            boolean any = false;
-            if (report.getSections() != null) {
-                for (ReportSection sec : report.getSections()) {
-                    if (sec.getSuspects() == null) {
-                        continue;
-                    }
-                    for (Map<String, Object> s : sec.getSuspects()) {
-                        any = true;
-                        sb.append("- ").append(s).append('\n');
-                    }
-                }
-            }
-            if (!any) {
-                sb.append("- 无\n");
-            }
+        }
+        if (!any) {
+            sb.append("- 无\n");
         }
 
         sb.append("\n## 5. 修改建议\n");
@@ -135,18 +126,6 @@ public class TextReportRenderer {
         if (!miss) {
             sb.append("- 无\n");
         }
-        if (health) {
-            sb.append("\n## 6b. 能力上限说明\n");
-            ReportSection mem = report.sectionOfType("memory");
-            if (mem != null && mem.getNote() != null) {
-                sb.append("- ").append(mem.getNote()).append('\n');
-            } else {
-                sb.append("- 见缺失证据；无 hprof 时不能做对象级堆归因。\n");
-            }
-        }
-        sb.append("\n## 7. 声明\n");
-        sb.append(report.getDisclaimer() == null ? JfaConstants.DISCLAIMER : report.getDisclaimer());
-        sb.append('\n');
         return sb.toString();
     }
 

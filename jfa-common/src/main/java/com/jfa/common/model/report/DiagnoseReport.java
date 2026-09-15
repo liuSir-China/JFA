@@ -23,7 +23,6 @@ public class DiagnoseReport {
     private List<TimelineEvent> timeline = new ArrayList<TimelineEvent>();
     private List<EvidenceItem> evidence = new ArrayList<EvidenceItem>();
     private List<ReportSection> sections = new ArrayList<ReportSection>();
-    private String disclaimer = JfaConstants.DISCLAIMER;
 
     public String getReportSchemaVersion() {
         return reportSchemaVersion;
@@ -103,14 +102,6 @@ public class DiagnoseReport {
 
     public void setSections(List<ReportSection> sections) {
         this.sections = sections;
-    }
-
-    public String getDisclaimer() {
-        return disclaimer;
-    }
-
-    public void setDisclaimer(String disclaimer) {
-        this.disclaimer = disclaimer;
     }
 
     public ReportSection sectionOfType(String type) {

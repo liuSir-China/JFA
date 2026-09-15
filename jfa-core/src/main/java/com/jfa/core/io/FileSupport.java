@@ -152,6 +152,36 @@ public final class FileSupport {
         }
     }
 
+    /**
+     * Recursively delete a file or directory. Used for cover.file replacement of
+     * JFA-managed {@code reportfile/pid_* } trees only.
+     */
+    public static void deleteTree(File root) {
+        if (root == null || !root.exists()) {
+            return;
+        }
+        try {
+            Files.walkFileTree(root.toPath(), new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    Files.deleteIfExists(file);
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                    if (exc != null) {
+                        throw exc;
+                    }
+                    Files.deleteIfExists(dir);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            throw new JfaException(ErrorCode.E_IO_EVIDENCE, "无法删除目录: " + root, e);
+        }
+    }
+
     public static boolean wildcard(String name, String pattern) {
         return match(name, pattern, 0, 0);
     }

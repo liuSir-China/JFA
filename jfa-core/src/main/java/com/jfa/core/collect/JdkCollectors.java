@@ -71,7 +71,7 @@ public class JdkCollectors {
     }
 
     public File collectHeapDump(JavaProcessInfo proc, File evidenceDir, boolean confirm) {
-        ConfirmGate.assertDumpAllowed(config, confirm);
+        ConfirmGate.assertDumpAllowed(confirm);
         File dir = new File(evidenceDir, "heap");
         FileSupport.mkdirs(dir);
         diskGuard.assertCanWriteLarge(dir);
@@ -109,7 +109,7 @@ public class JdkCollectors {
 
     public File collectJstatSample(JavaProcessInfo proc, File evidenceDir, boolean confirm,
                                    String interval, String duration) {
-        ConfirmGate.assertDumpAllowed(config, confirm);
+        ConfirmGate.assertDumpAllowed(confirm);
         File dir = new File(evidenceDir, "samples");
         FileSupport.mkdirs(dir);
         File jstat = locator.findTool("jstat", proc.getJavaHome());

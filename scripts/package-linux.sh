@@ -4,6 +4,7 @@
 #   dist/jfa-linux/lib/jfa.jar
 #   dist/jfa-linux/conf/jfa.properties
 #   dist/jfa-linux/docs/
+#   dist/jfa-linux/reportfile/
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -27,7 +28,7 @@ fi
 
 DEST="$ROOT/dist/jfa-linux"
 rm -rf "$DEST"
-mkdir -p "$DEST/bin" "$DEST/lib" "$DEST/conf" "$DEST/docs" "$DEST/testdata"
+mkdir -p "$DEST/bin" "$DEST/lib" "$DEST/conf" "$DEST/docs" "$DEST/testdata" "$DEST/reportfile"
 
 cp -f "$ROOT/jfa-cli/target/jfa-cli-1.0.0.jar" "$DEST/lib/jfa.jar"
 cp -f "$ROOT/conf/jfa.properties" "$DEST/conf/jfa.properties"
@@ -43,6 +44,7 @@ cat > "$DEST/bin/jfa" << 'LAUNCH'
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
+mkdir -p "$ROOT/reportfile"
 if [[ -z "${JAVA_HOME:-}" ]]; then
   JAVA_BIN="$(command -v java || true)"
 else

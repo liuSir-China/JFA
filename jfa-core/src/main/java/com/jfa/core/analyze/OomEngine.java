@@ -149,7 +149,7 @@ public class OomEngine {
                     + "。不能做精确对象归因。";
             a.missing.add("hprof（HeapDumpOnOutOfMemoryError 或 jfa collect heapdump --confirm）");
             a.next.add("下次重启按 jfa help config 补齐滚动 GC 日志与 HeapDumpOnOutOfMemoryError（可选增强，非前提）");
-            a.next.add("若进程仍存活：非交易窗执行 jfa collect heapdump --pid <pid> --confirm 后复跑 --type memory");
+            a.next.add("若进程仍存活：确认后执行 jfa collect heapdump --pid <pid> --confirm 后复跑 --type memory");
             a.recommendations = e2Recommendations(stack, trend);
         } else if (trend.available && !stack.found) {
             a.level = EvidenceLevel.E2;
@@ -182,7 +182,7 @@ public class OomEngine {
             if (dumpRefused) {
                 a.capabilityLimit = "用户未确认活体 heap dump / 采样：不能做对象级堆归因；当前仅基于非 dump 证据（命令行/已有日志）。";
                 a.missing.add("hprof（用户拒绝或未触发活体 dump）");
-                a.next.add("若需提高内存侧置信度：非交易窗执行 jfa collect heapdump --pid <pid> --confirm 后复跑 --type memory");
+                a.next.add("若需提高内存侧置信度：确认后执行 jfa collect heapdump --pid <pid> --confirm 后复跑 --type memory");
             } else {
                 a.missing.add("hprof");
                 a.missing.add("可用 GC 日志");
@@ -256,7 +256,7 @@ public class OomEngine {
         Recommendations r = new Recommendations();
         r.getOps().add(new Recommendation("REC-OPS-01",
                 dumpRefused
-                        ? "若需提高内存侧置信度：在非交易窗执行 jfa collect heapdump --pid … --confirm 后复跑 --type memory"
+                        ? "若需提高内存侧置信度：确认后执行 jfa collect heapdump --pid … --confirm 后复跑 --type memory"
                         : "无硬性代码修改建议；证据不足以指向具体根因。可选 jfa help config 下次重启补齐 GC/hprof 参数（非本诊断前提）。",
                 dumpRefused ? "未取得 hprof，不能做对象级堆归因。" : "健康体检弱结论，禁止硬编根因。",
                 "复跑后对照 heap_oom_evidence_found 与 Top 类是否出现。"));

@@ -41,7 +41,7 @@ jfa analyze --thread-dump ./threads/td.txt --type thread
 
 ## 4. 活体 dump（需确认）
 
-heap dump 有 STW / 磁盘 / 内存风险，默认必须 `--confirm`：
+heap dump 有 STW / 磁盘 / 服务影响。交互终端会询问 y/n；脚本请使用 `--confirm`（等同于回答 y）：
 
 ```bash
 jfa collect threaddump --pid <pid>
@@ -49,7 +49,7 @@ jfa collect heapdump --pid <pid> --confirm
 jfa collect sample --pid <pid> --interval 5s --duration 60s --confirm
 ```
 
-无 `--confirm` 时不会生成 hprof、不会附加 jstat。
+无确认时不会生成 hprof、不会附加 jstat。`diagnose`/`analyze` 对活体 pid 会优先复用目标 JVM 已有 hprof/GC，证据不足才采集。
 
 ## 5. 抄作业：推荐 JVM 配置（可选，非前提）
 
@@ -59,7 +59,7 @@ jfa help config
 jfa config recommend
 ```
 
-输出含 JDK 8 滚动 GC 文件日志、`HeapDumpOnOutOfMemoryError`、`HeapDumpPath` 以及 bash / systemd 粘贴示例。
+输出含 JDK 8 滚动 GC 文件日志、`HeapDumpOnOutOfMemoryError`、`HeapDumpPath` 以及 bash 启动脚本示例（按配置项分组表格）。
 
 ## 6. 打包布局
 
