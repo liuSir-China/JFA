@@ -48,9 +48,10 @@ public class EvidenceAndConfigTest {
         oldF.setLastModified(System.currentTimeMillis() - 10L * 24 * 3600 * 1000);
         newF.setLastModified(System.currentTimeMillis());
         File meta = new File(tmp.getRoot(), "svc1/meta.json");
+        String evidenceDir = new File(tmp.getRoot(), "svc1").getAbsolutePath().replace('\\', '/');
         java.nio.file.Files.write(meta.toPath(),
                 ("{\"service_id\":\"svc1\",\"paths\":{\"evidence_dir\":\""
-                        + tmp.getRoot() + "/svc1\"},\"lifecycle_managed_by_jfa\":false}").getBytes("UTF-8"));
+                        + evidenceDir + "\"},\"lifecycle_managed_by_jfa\":false}").getBytes("UTF-8"));
         EvidenceGc.GcReport r = new EvidenceGc().gc(cfg, "svc1", false);
         Assert.assertTrue(r.deleted.toString().contains("old.hprof"));
         Assert.assertFalse(newF.exists() && r.deleted.toString().contains("new.hprof") && !newF.exists());

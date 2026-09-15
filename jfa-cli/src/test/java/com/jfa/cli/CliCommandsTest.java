@@ -86,10 +86,12 @@ public class CliCommandsTest {
 
     @Test
     public void collectWithoutConfirmIsError() throws Exception {
-        Capture c = run(30, "collect", "heapdump", "--pid", "1");
+        // Use this JVM's PID so the process exists on Windows and Linux alike.
+        String pid = java.lang.management.ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
+        Capture c = run(30, "collect", "heapdump", "--pid", pid);
         Assert.assertTrue(c.err.contains("E_CONFIRM_REQUIRED"));
         Assert.assertTrue(c.err.contains("STW") || c.err.contains("磁盘"));
-        Capture s = run(30, "collect", "sample", "--pid", "1");
+        Capture s = run(30, "collect", "sample", "--pid", pid);
         Assert.assertTrue(s.err.contains("E_CONFIRM_REQUIRED"));
     }
 

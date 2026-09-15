@@ -200,6 +200,11 @@ public class JfaMain {
         if (pid == null) {
             throw new JfaException(ErrorCode.E_USAGE, "collect 需要 --pid");
         }
+                if (("heapdump".equals(sub) || "heap-dump".equals(sub) || "sample".equals(sub))
+                && !p.flag("confirm")) {
+            throw new JfaException(ErrorCode.E_CONFIRM_REQUIRED,
+                    "\u5371\u9669\u64cd\u4f5c\u9700\u8981 --confirm\u3002" + ConfirmGate.RISK_HINT);
+        }
         JavaProcessInfo proc = new JavaProcessDiscovery().requirePid(pid);
         File evidenceDir = p.opt("evidence-dir") != null ? new File(p.opt("evidence-dir"))
                 : config.serviceDir("pid-" + pid);
@@ -214,19 +219,11 @@ public class JfaMain {
             return 0;
         }
         if ("heapdump".equals(sub) || "heap-dump".equals(sub)) {
-            if (!p.flag("confirm")) {
-                throw new JfaException(ErrorCode.E_CONFIRM_REQUIRED,
-                        "危险操作需要 --confirm。 " + ConfirmGate.RISK_HINT);
-            }
             File f = col.collectHeapDump(proc, evidenceDir, true);
             System.out.println(f.getAbsolutePath());
             return 0;
         }
         if ("sample".equals(sub)) {
-            if (!p.flag("confirm")) {
-                throw new JfaException(ErrorCode.E_CONFIRM_REQUIRED,
-                        "危险操作需要 --confirm。 " + ConfirmGate.RISK_HINT);
-            }
             File f = col.collectJstatSample(proc, evidenceDir, true, p.opt("interval", "5s"),
                     p.opt("duration", "60s"));
             System.out.println(f.getAbsolutePath());

@@ -28,7 +28,8 @@ public class EvidenceGc {
         r.dryRun = dryRun;
         for (File root : roots) {
             for (File f : FileSupport.listFilesRecursive(root)) {
-                String path = f.getAbsolutePath();
+                // Normalize separators so Windows paths match category folders too.
+                String path = f.getAbsolutePath().replace('\\', '/');
                 if (path.endsWith("meta.json")) {
                     continue;
                 }
