@@ -32,7 +32,13 @@ public class CliCommandsTest {
         Assert.assertTrue(cfg.out.contains("不是使用本产品的前提"));
         Assert.assertTrue(cfg.out.contains("HeapDumpOnOutOfMemoryError"));
         Assert.assertTrue(cfg.out.contains("-Xloggc") || cfg.out.contains("PrintGC"));
-        Assert.assertTrue(cfg.out.contains("Environment=") || cfg.out.contains("[Service]"));
+        Assert.assertTrue(cfg.out.contains("| 参数 |") || cfg.out.contains("|------|"));
+        Assert.assertTrue(cfg.out.contains("#!/bin/bash") || cfg.out.contains("JAVA_OPTS"));
+        Assert.assertFalse(cfg.out.contains("Environment="));
+        Assert.assertFalse(cfg.out.contains("[Service]"));
+        Assert.assertFalse(cfg.out.contains("ExecStart="));
+        Assert.assertFalse(cfg.out.contains("JDK 11"));
+        Assert.assertFalse(cfg.out.contains("-Xlog:gc"));
         Assert.assertFalse(cfg.out.toLowerCase().contains("mat"));
     }
 
@@ -60,6 +66,8 @@ public class CliCommandsTest {
                 "--out", tmp.newFolder("out-d").getAbsolutePath());
         Assert.assertTrue(deadlock.out.contains("死锁") || deadlock.out.contains("deadlock"));
         Assert.assertFalse(deadlock.out.toLowerCase().contains("mat"));
+        Assert.assertTrue(deadlock.out.contains("报告文件") || deadlock.out.contains("JSON 报告"));
+        Assert.assertFalse(deadlock.out.contains("## 7"));
 
         Capture health = run(0, "analyze",
                 "--evidence-dir", new File(testdata, "evidence/health-check").getAbsolutePath(),
@@ -71,6 +79,10 @@ public class CliCommandsTest {
         Assert.assertEquals("health_check", report.getReportMode());
         Assert.assertEquals("auto", report.getAnalysisMode());
         Assert.assertFalse(report.getSummary().isFabricatedRootCause());
+        Assert.assertFalse(health.out.contains("disclaimer"));
+        Assert.assertFalse(health.out.contains("\"sections\""));
+        Assert.assertTrue(health.err.contains("JSON 报告") || health.err.contains("报告文件"));
+        Assert.assertTrue(health.err.contains("/") || health.err.contains("\\"));
 
         Capture mem = run(0, "analyze",
                 "--gc-log", new File(testdata, "gc/old-gen-spiral.log").getAbsolutePath(),
@@ -112,6 +124,36 @@ public class CliCommandsTest {
     public void unknownType() {
         Capture c = run(2, "analyze", "--type", "magic", "--evidence-dir", tmp.getRoot().getAbsolutePath());
         Assert.assertTrue(c.err.contains("E_USAGE") || c.err.contains("未知 --type"));
+    }
+
+    @Test
+    public void analyzeDefaultLayoutPrintsAbsoluteReportPath() throws Exception {
+        File install = tmp.newFolder("jfa-install");
+        File confDir = new File(install, "conf");
+        Assert.assertTrue(confDir.mkdirs());
+        File cfg = new File(confDir, "jfa.properties");
+        java.nio.file.Files.write(cfg.toPath(),
+                ("evidence.root=" + new File(install, "evidence").getAbsolutePath().replace("\\", "/")
+                        + "\ncover.file=true\noutbound.enabled=false\nretention.days=7\n"
+                        + "min.free.bytes=1\nmin.free.ratio=0\n")
+                        .getBytes(StandardCharsets.UTF_8));
+        File testdata = testdata();
+        Capture c = run(0, "--config", cfg.getAbsolutePath(), "analyze",
+                "--evidence-dir", new File(testdata, "evidence/health-check").getAbsolutePath(),
+                "--type", "auto",
+                "--format", "text");
+        Assert.assertTrue(c.out.contains("报告文件:"));
+        Assert.assertTrue(c.out.contains("健康体检"));
+        String marker = "报告文件:";
+        int i = c.out.indexOf(marker);
+        Assert.assertTrue(i >= 0);
+        String pathLine = c.out.substring(i + marker.length()).trim().split("\\r?\\n")[0].trim();
+        File report = new File(pathLine);
+        Assert.assertTrue("expected report file: " + pathLine, report.isFile());
+        String norm = report.getAbsolutePath().replace('\\', '/');
+        Assert.assertTrue(norm.contains("/reportfile/"));
+        Assert.assertTrue(norm.contains("/pid_"));
+        Assert.assertTrue(report.getName().endsWith(".md"));
     }
 
     private File writeConfig(File home) throws Exception {

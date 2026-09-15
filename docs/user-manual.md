@@ -8,7 +8,9 @@ JFA 分析**已有** Java 服务的本地证据，输出研发可直接据此修
 
 `discover` 需要能读 `/proc`。`jstack` / `jcmd` / `jmap` 通常要求与目标 JVM **同一操作系统用户**（或具备等价 attach 权限）。无权时返回 `E_PERM_DISCOVERY` / `E_PERM_ATTACH`，并提示换用户，不会静默失败。
 
-## 证据目录
+## 证据与报告目录
+
+登记服务时的 JFA 工作区（`evidence.root`，不是应用的 HeapDumpPath）：
 
 ```
 {evidence_root}/{service_id}/
@@ -20,7 +22,15 @@ JFA 分析**已有** Java 服务的本地证据，输出研发可直接据此修
   samples/
 ```
 
-外部大文件可在 `meta.json` 中记录绝对路径，分析时只读打开，不强制拷贝。
+`diagnose` / `analyze` 默认把本轮证据与报告写到安装目录下：
+
+```
+<install>/reportfile/pid_<pid>/<yyyyMMdd-HHmmss>/
+```
+
+无 pid 时使用 `pid_offline`（或从证据路径解析出的 pid）。`cover.file=true` 时会先清空该 pid 目录再写本轮。
+
+外部大文件可在 `meta.json` 中记录绝对路径，分析时只读打开，不强制拷贝。应用自己的 dump/GC 不在 JFA 管理范围内，retention 不会删除它们。
 
 ## 报告
 
@@ -43,7 +53,7 @@ JFA 分析**已有** Java 服务的本地证据，输出研发可直接据此修
 
 ## 活体取证
 
-默认 `require.confirm=true`。确认文案含 STW/磁盘/内存风险。交易时段可将 `trading.hours.policy` 设为 `deny`。
+默认对 heap dump / jstat 采样先打印 STW、磁盘与服务影响说明，并要求输入 `y`/`n`。脚本与 CI 可传 `--confirm`（等同于回答 `y`）。thread dump 采集不走该危险确认。不依赖交易时段配置。
 
 ## 磁盘与清理
 

@@ -4,7 +4,6 @@ import com.jfa.common.AnalysisMode;
 import com.jfa.common.Confidence;
 import com.jfa.common.ErrorCode;
 import com.jfa.common.EvidenceLevel;
-import com.jfa.common.JfaConstants;
 import com.jfa.common.JfaException;
 import com.jfa.common.OutputFormat;
 import com.jfa.common.ReportMode;
@@ -20,9 +19,11 @@ import com.jfa.common.model.report.TimelineEvent;
 import com.jfa.common.time.TimeSupport;
 import com.jfa.core.analyze.DeadlockEngine;
 import com.jfa.core.analyze.OomEngine;
+import com.jfa.core.collect.ConfirmGate;
 import com.jfa.core.collect.EvidencePack;
 import com.jfa.core.collect.JdkCollectors;
 import com.jfa.core.discovery.JavaProcessDiscovery;
+import com.jfa.core.evidence.JvmEvidenceLocator;
 import com.jfa.core.io.FileSupport;
 import com.jfa.core.registry.ServiceRegistry;
 import com.jfa.core.report.TextReportRenderer;
@@ -44,10 +45,6 @@ public class DiagnoseOrchestrator {
         JfaConfig cfg = req.getConfig();
         ServiceRegistry registry = new ServiceRegistry(cfg);
         ResolvedTarget target = resolve(req, registry);
-        EvidencePack pack = EvidencePack.index(target.evidenceDir, target.meta,
-                req.getHprof(), req.getGcLog(), req.getAppLog(), req.getThreadDump());
-        pack.setEvidenceDir(target.evidenceDir);
-
         DiagnoseReport report = new DiagnoseReport();
         report.setGeneratedAt(TimeSupport.nowIso());
         report.setAnalysisMode(req.getMode().wireName());
@@ -55,6 +52,9 @@ public class DiagnoseOrchestrator {
         report.getTarget().setPid(target.pid);
         report.getTarget().setMainClassOrJar(target.mainClass);
         report.getTarget().setHost(localHost());
+
+        EvidencePack pack = buildPack(req, target, report);
+        pack.setEvidenceDir(target.runDir);
 
         boolean dumpRefused = false;
         if (req.getMode().includeThread()) {
@@ -87,35 +87,80 @@ public class DiagnoseOrchestrator {
         return result;
     }
 
+    private EvidencePack buildPack(DiagnoseRequest req, ResolvedTarget target, DiagnoseReport report) {
+        EvidencePack pack = new EvidencePack();
+        pack.setMeta(target.meta);
+        pack.setHprof(existingFile(req.getHprof()));
+        pack.setGcLog(existingFile(req.getGcLog()));
+        pack.setAppLog(existingFile(req.getAppLog()));
+        pack.setThreadDump(existingFile(req.getThreadDump()));
+
+        if (target.process != null) {
+            File hBefore = pack.getHprof();
+            File gBefore = pack.getGcLog();
+            JvmEvidenceLocator.fillMissing(pack, target.process);
+            if (pack.getHprof() != null && pack.getHprof() != hBefore) {
+                report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                        "复用目标 JVM HeapDumpPath 已有 hprof（不采集新 dump）",
+                        pack.getHprof().getAbsolutePath()));
+            }
+            if (pack.getGcLog() != null && pack.getGcLog() != gBefore) {
+                report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
+                        "复用目标 JVM GC 日志（-Xloggc / 相关标志）",
+                        pack.getGcLog().getAbsolutePath()));
+            }
+        }
+
+        EvidencePack fromDir = EvidencePack.index(target.evidenceDir, target.meta, null, null, null, null);
+        if (pack.getHprof() == null) {
+            pack.setHprof(fromDir.getHprof());
+        }
+        if (pack.getGcLog() == null) {
+            pack.setGcLog(fromDir.getGcLog());
+        }
+        if (pack.getAppLog() == null) {
+            pack.setAppLog(fromDir.getAppLog());
+        }
+        if (pack.getThreadDump() == null) {
+            pack.setThreadDump(fromDir.getThreadDump());
+        }
+        if (pack.getJstatSample() == null) {
+            pack.setJstatSample(fromDir.getJstatSample());
+        }
+        return pack;
+    }
+
+    private static File existingFile(File f) {
+        return f != null && f.isFile() ? f.getAbsoluteFile() : null;
+    }
+
     private void collectThreadIfNeeded(DiagnoseRequest req, ResolvedTarget target, EvidencePack pack,
                                        DiagnoseReport report) {
-        if (pack.getThreadDump() != null) {
+        if (JvmEvidenceLocator.looksUsableThreadDump(pack.getThreadDump())) {
             return;
         }
+        pack.setThreadDump(null);
         if (!req.isLiveCollect() || target.process == null || !discovery.pidExists(target.process.getPid())) {
             return;
         }
         JdkCollectors col = new JdkCollectors(req.getConfig());
-        File td = col.collectThreadDump(target.process, target.evidenceDir);
+        File td = col.collectThreadDump(target.process, target.runDir);
         pack.setThreadDump(td);
         report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(), "采集 thread dump", td.getAbsolutePath()));
     }
 
     private boolean collectMemoryIfNeeded(DiagnoseRequest req, ResolvedTarget target, EvidencePack pack,
                                           DiagnoseReport report) {
-        if (pack.getHprof() != null) {
+        if (JvmEvidenceLocator.looksUsableHprof(pack.getHprof())) {
             return false;
         }
+        pack.setHprof(null);
         if (!req.isLiveCollect() || target.process == null) {
             return false;
         }
-        if (!req.isConfirm()) {
-            report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
-                    "未确认活体 dump，跳过 hprof（能力上限：不能做对象级堆归因）", "confirm"));
-            return true;
-        }
+        ConfirmGate.assertDumpAllowed(req.isConfirm());
         JdkCollectors col = new JdkCollectors(req.getConfig());
-        File hprof = col.collectHeapDump(target.process, target.evidenceDir, true);
+        File hprof = col.collectHeapDump(target.process, target.runDir, true);
         pack.setHprof(hprof);
         report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(), "经确认采集 heap dump", hprof.getAbsolutePath()));
         return false;
@@ -337,16 +382,17 @@ public class DiagnoseOrchestrator {
     }
 
     private DiagnoseResult write(DiagnoseReport report, DiagnoseRequest req, ResolvedTarget target) {
-        File outDir = req.getOutDir();
+        File outDir = target.runDir;
         if (outDir == null) {
-            outDir = new File(target.evidenceDir, "reports");
+            outDir = req.getOutDir() != null ? req.getOutDir() : new File(target.evidenceDir, "reports");
         }
         FileSupport.mkdirs(outDir);
         String stamp = TimeSupport.nowFileStamp();
         String text = textRenderer.render(report);
         String json;
         try {
-            json = JsonSupport.mapper().writerWithDefaultPrettyPrinter().writeValueAsString(report);
+            json = JsonSupport.mapper().writerWithDefaultPrettyPrinter()
+                    .writeValueAsString(jsonView(report));
         } catch (Exception e) {
             throw new JfaException(ErrorCode.E_IO_REPORT, "序列化 JSON 报告失败", e);
         }
@@ -360,7 +406,7 @@ public class DiagnoseOrchestrator {
         OutputFormat fmt = req.getFormat() == null ? OutputFormat.BOTH : req.getFormat();
         try {
             if (fmt.writeTextFile() || fmt == OutputFormat.BOTH) {
-                File tf = new File(outDir, "diagnose-" + stamp + ".txt");
+                File tf = new File(outDir, "diagnose-" + stamp + ".md");
                 FileSupport.writeUtf8(tf, text);
                 result.setTextFile(tf);
             }
@@ -370,7 +416,7 @@ public class DiagnoseOrchestrator {
                 result.setJsonFile(jf);
             }
             if (fmt == OutputFormat.TEXT && result.getTextFile() == null) {
-                File tf = new File(outDir, "diagnose-" + stamp + ".txt");
+                File tf = new File(outDir, "diagnose-" + stamp + ".md");
                 FileSupport.writeUtf8(tf, text);
                 result.setTextFile(tf);
             }
@@ -381,6 +427,28 @@ public class DiagnoseOrchestrator {
             throw e;
         }
         return result;
+    }
+
+    /**
+     * Healthy reports serialize only conclusion/summary + collection timeline.
+     * Fault reports keep full chapters. Disclaimer is never included.
+     */
+    private static DiagnoseReport jsonView(DiagnoseReport report) {
+        if (!ReportMode.HEALTH_CHECK.wireName().equals(report.getReportMode())) {
+            return report;
+        }
+        DiagnoseReport slim = new DiagnoseReport();
+        slim.setReportSchemaVersion(report.getReportSchemaVersion());
+        slim.setProduct(report.getProduct());
+        slim.setGeneratedAt(report.getGeneratedAt());
+        slim.setAnalysisMode(report.getAnalysisMode());
+        slim.setReportMode(report.getReportMode());
+        slim.setTarget(report.getTarget());
+        slim.setSummary(report.getSummary());
+        slim.setTimeline(report.getTimeline());
+        slim.setEvidence(null);
+        slim.setSections(null);
+        return slim;
     }
 
     private ResolvedTarget resolve(DiagnoseRequest req, ServiceRegistry registry) {
@@ -424,7 +492,6 @@ public class DiagnoseOrchestrator {
             t.serviceId = "pid-" + req.getPid();
             t.evidenceDir = req.getEvidenceDir() != null ? req.getEvidenceDir()
                     : req.getConfig().serviceDir(t.serviceId);
-            FileSupport.mkdirs(t.evidenceDir);
         } else if (req.getEvidenceDir() != null) {
             t.evidenceDir = req.getEvidenceDir();
             File meta = new File(t.evidenceDir, "meta.json");
@@ -432,18 +499,25 @@ public class DiagnoseOrchestrator {
                 t.meta = registry.readFile(meta);
                 t.serviceId = t.meta.getServiceId();
                 t.mainClass = t.meta.getMatch() == null ? null : t.meta.getMatch().getMainClassContains();
+                if (t.pid == null && t.meta.getMatch() != null) {
+                    t.pid = t.meta.getMatch().getLastPid();
+                }
             } else {
                 t.serviceId = t.evidenceDir.getName();
             }
         } else {
             t.serviceId = "adhoc";
             t.evidenceDir = req.getOutDir() != null ? req.getOutDir() : req.getConfig().serviceDir("adhoc");
-            FileSupport.mkdirs(t.evidenceDir);
         }
         if (req.getEvidenceDir() != null) {
             t.evidenceDir = req.getEvidenceDir();
         }
-        FileSupport.mkdirs(new File(t.evidenceDir, "reports"));
+        if (t.pid == null) {
+            t.pid = RunLayout.parsePid(t.evidenceDir, req.getHprof(), req.getThreadDump());
+        }
+        t.runDir = RunLayout.prepareRunDir(req.getConfig(),
+                RunLayout.pidKey(t.pid, t.evidenceDir, req.getHprof(), req.getThreadDump()),
+                req.getOutDir());
         return t;
     }
 
@@ -460,6 +534,7 @@ public class DiagnoseOrchestrator {
         String serviceId;
         String mainClass;
         File evidenceDir;
+        File runDir;
         ServiceMeta meta;
         JavaProcessInfo process;
     }

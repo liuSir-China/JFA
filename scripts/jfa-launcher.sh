@@ -2,6 +2,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
+mkdir -p "$ROOT/reportfile"
 if [[ -z "${JAVA_HOME:-}" ]]; then
   JAVA_BIN="$(command -v java || true)"
 else

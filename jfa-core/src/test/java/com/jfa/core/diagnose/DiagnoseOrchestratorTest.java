@@ -38,6 +38,10 @@ public class DiagnoseOrchestratorTest {
                 || r.getText().contains("加锁顺序"));
         Assert.assertFalse(r.getJson().toLowerCase().contains("mat"));
         Assert.assertFalse(r.getText().toLowerCase().contains("mat"));
+        Assert.assertFalse(r.getText().contains("## 7"));
+        Assert.assertFalse(r.getText().contains("声明"));
+        Assert.assertFalse(r.getJson().contains("disclaimer"));
+        Assert.assertTrue(r.getTextFile().getName().endsWith(".md"));
     }
 
     @Test
@@ -51,6 +55,14 @@ public class DiagnoseOrchestratorTest {
         Assert.assertFalse(r.getReport().getSummary().isFabricatedRootCause());
         Assert.assertEquals(0, r.getExitCode());
         Assert.assertTrue(r.getText().contains("健康体检"));
+        Assert.assertTrue(r.getText().contains("采集时间线") || r.getText().contains("## 2"));
+        Assert.assertFalse(r.getText().contains("## 3. 证据"));
+        Assert.assertFalse(r.getText().contains("## 7"));
+        Assert.assertFalse(r.getText().contains("声明"));
+        Assert.assertFalse(r.getJson().contains("disclaimer"));
+        Assert.assertFalse(r.getJson().contains("\"sections\""));
+        Assert.assertFalse(r.getJson().contains("\"evidence\""));
+        Assert.assertTrue(r.getTextFile().getName().endsWith(".md"));
     }
 
     @Test
@@ -72,6 +84,8 @@ public class DiagnoseOrchestratorTest {
         Assert.assertNotNull(mem.getRecommendations().getCode().get(0).getHowToVerify());
         Assert.assertFalse(r.getJson().toLowerCase().contains("mat"));
         Assert.assertFalse(joinNext(mem).toLowerCase().contains("mat"));
+        Assert.assertFalse(r.getText().contains("## 7"));
+        Assert.assertFalse(r.getJson().contains("disclaimer"));
     }
 
     @Test
@@ -94,7 +108,28 @@ public class DiagnoseOrchestratorTest {
         Assert.assertFalse(r.getText().contains("Found one Java-level deadlock") && r.getText().contains("伪造"));
     }
 
-    private DiagnoseResult run(File evidenceDir, AnalysisMode mode, File hprof, File gc, File td) {
+    @Test
+    public void defaultLayoutWritesUnderReportfilePidTimestamp() throws Exception {
+        JfaConfig cfg = JfaConfig.defaults();
+        File reportfile = tmp.newFolder("reportfile");
+        cfg.setReportfileRoot(reportfile);
+        cfg.setCoverFile(true);
+        DiagnoseRequest req = new DiagnoseRequest();
+        req.setConfig(cfg);
+        req.setEvidenceDir(TestDataPaths.file("evidence/health-check"));
+        req.setThreadDump(TestDataPaths.file("evidence/health-check/threads/td.txt"));
+        req.setMode(AnalysisMode.AUTO);
+        req.setLiveCollect(false);
+        req.setFormat(OutputFormat.BOTH);
+        DiagnoseResult r = new DiagnoseOrchestrator().run(req);
+        Assert.assertNotNull(r.getTextFile());
+        String path = r.getTextFile().getAbsolutePath().replace('\\', '/');
+        Assert.assertTrue(path.contains("/pid_"));
+        Assert.assertTrue(r.getTextFile().getParentFile().getParentFile().getName().startsWith("pid_"));
+        Assert.assertEquals("reportfile", r.getTextFile().getParentFile().getParentFile().getParentFile().getName());
+        Assert.assertTrue(r.getTextFile().getName().endsWith(".md"));
+        Assert.assertTrue(r.getText().contains("健康体检"));
+    }
         DiagnoseRequest req = base(evidenceDir);
         req.setMode(mode);
         req.setHprof(hprof);

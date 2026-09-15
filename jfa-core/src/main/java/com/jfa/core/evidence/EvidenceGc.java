@@ -17,25 +17,31 @@ public class EvidenceGc {
 
     public GcReport gc(JfaConfig config, String serviceId, boolean dryRun) {
         long cutoff = System.currentTimeMillis() - config.getRetentionDays() * 24L * 3600L * 1000L;
-        List<File> roots = new ArrayList<File>();
+        List<Root> roots = new ArrayList<Root>();
         if (serviceId != null) {
-            roots.add(new ServiceRegistry(config).evidenceDirOf(
-                    new ServiceRegistry(config).require(serviceId)));
-        } else if (config.getEvidenceRoot() != null) {
-            roots.add(config.getEvidenceRoot());
+            roots.add(new Root(new ServiceRegistry(config).evidenceDirOf(
+                    new ServiceRegistry(config).require(serviceId)), false));
+        } else {
+            if (config.getEvidenceRoot() != null) {
+                roots.add(new Root(config.getEvidenceRoot(), false));
+            }
+            File reportfile = config.getReportfileRoot();
+            if (reportfile != null) {
+                roots.add(new Root(reportfile, true));
+            }
         }
         GcReport r = new GcReport();
         r.dryRun = dryRun;
-        for (File root : roots) {
-            for (File f : FileSupport.listFilesRecursive(root)) {
-                // Normalize separators so Windows paths match category folders too.
+        for (Root root : roots) {
+            if (root.dir == null || !root.dir.exists()) {
+                continue;
+            }
+            for (File f : FileSupport.listFilesRecursive(root.dir)) {
                 String path = f.getAbsolutePath().replace('\\', '/');
                 if (path.endsWith("meta.json")) {
                     continue;
                 }
-                if (!(path.contains("/heap/") || path.contains("/threads/")
-                        || path.contains("/reports/") || path.contains("/samples/")
-                        || path.contains("/gc/"))) {
+                if (!root.entireTree && !isManagedCategory(path)) {
                     continue;
                 }
                 if (f.lastModified() >= cutoff) {
@@ -50,5 +56,26 @@ public class EvidenceGc {
             }
         }
         return r;
+    }
+
+    /**
+     * Category folders under JFA workspace. Application dump/GC paths outside these
+     * directories are never deleted.
+     */
+    static boolean isManagedCategory(String path) {
+        String n = path.replace('\\', '/');
+        return n.contains("/heap/") || n.contains("/threads/")
+                || n.contains("/reports/") || n.contains("/samples/")
+                || n.contains("/gc/");
+    }
+
+    private static final class Root {
+        final File dir;
+        final boolean entireTree;
+
+        Root(File dir, boolean entireTree) {
+            this.dir = dir;
+            this.entireTree = entireTree;
+        }
     }
 }

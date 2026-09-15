@@ -185,13 +185,24 @@ public class JfaMain {
         } else {
             System.out.print(result.getText());
         }
+        printReportPaths(result, fmt);
+        return result.getExitCode();
+    }
+
+    /**
+     * Always print absolute report path(s) so the user can open the file.
+     * JSON format keeps stdout as pure JSON and prints paths on stderr.
+     */
+    static void printReportPaths(DiagnoseResult result, OutputFormat fmt) {
+        java.io.PrintStream dest = fmt == OutputFormat.JSON ? System.err : System.out;
+        dest.println();
+        dest.println("======== 报告已写入 ========");
         if (result.getTextFile() != null) {
-            System.err.println("TEXT_REPORT " + result.getTextFile().getAbsolutePath());
+            dest.println("报告文件: " + result.getTextFile().getAbsolutePath());
         }
         if (result.getJsonFile() != null) {
-            System.err.println("JSON_REPORT " + result.getJsonFile().getAbsolutePath());
+            dest.println("JSON 报告: " + result.getJsonFile().getAbsolutePath());
         }
-        return result.getExitCode();
     }
 
     private int cmdCollect(CliParser p, JfaConfig config) {
@@ -200,10 +211,8 @@ public class JfaMain {
         if (pid == null) {
             throw new JfaException(ErrorCode.E_USAGE, "collect 需要 --pid");
         }
-                if (("heapdump".equals(sub) || "heap-dump".equals(sub) || "sample".equals(sub))
-                && !p.flag("confirm")) {
-            throw new JfaException(ErrorCode.E_CONFIRM_REQUIRED,
-                    "\u5371\u9669\u64cd\u4f5c\u9700\u8981 --confirm\u3002" + ConfirmGate.RISK_HINT);
+        if (("heapdump".equals(sub) || "heap-dump".equals(sub) || "sample".equals(sub))) {
+            ConfirmGate.assertDumpAllowed(p.flag("confirm"));
         }
         JavaProcessInfo proc = new JavaProcessDiscovery().requirePid(pid);
         File evidenceDir = p.opt("evidence-dir") != null ? new File(p.opt("evidence-dir"))

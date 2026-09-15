@@ -50,7 +50,7 @@ if not exist "%JAR%" (
 echo [2/4] Assemble dist\%PKG_NAME% ...
 set "DEST=%PROJECT%\dist\%PKG_NAME%"
 if exist "%PROJECT%\dist" rmdir /s /q "%PROJECT%\dist"
-mkdir "%DEST%\bin" "%DEST%\lib" "%DEST%\conf" "%DEST%\docs" "%DEST%\testdata"
+mkdir "%DEST%\bin" "%DEST%\lib" "%DEST%\conf" "%DEST%\docs" "%DEST%\testdata" "%DEST%\reportfile"
 
 copy /y "%JAR%" "%DEST%\lib\jfa.jar" >nul
 if exist "%PROJECT%\conf\jfa.properties" copy /y "%PROJECT%\conf\jfa.properties" "%DEST%\conf\" >nul
