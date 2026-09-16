@@ -48,12 +48,18 @@ public final class ConsoleLayout {
             return false;
         }
         if (LEAD_DONE.compareAndSet(false, true)) {
-            dest.println();
-            dest.println();
+            // Always LF so Windows bat builds match Linux CLI output / tests.
+            dest.print("\n\n");
             dest.flush();
             return true;
         }
         return false;
+    }
+
+    /** Print one line terminated with LF (not the platform line separator). */
+    private static void printlnLf(PrintStream dest, String line) {
+        dest.print(line);
+        dest.print('\n');
     }
 
     public static int width() {
@@ -131,9 +137,9 @@ public final class ConsoleLayout {
                 line = line.substring(0, line.length() - 1);
             }
             if (isBanner(line)) {
-                dest.println(center(line.trim()));
+                printlnLf(dest, center(line.trim()));
             } else {
-                dest.println(line);
+                printlnLf(dest, line);
             }
         }
         dest.flush();
@@ -144,7 +150,7 @@ public final class ConsoleLayout {
             return;
         }
         ensureLead(dest);
-        dest.println(center(banner == null ? "" : banner.trim()));
+        printlnLf(dest, center(banner == null ? "" : banner.trim()));
         dest.flush();
     }
 
@@ -153,7 +159,7 @@ public final class ConsoleLayout {
             return;
         }
         ensureLead(dest);
-        dest.println(line == null ? "" : line);
+        printlnLf(dest, line == null ? "" : line);
         dest.flush();
     }
 

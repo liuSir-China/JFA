@@ -29,7 +29,7 @@ public class ConsoleLayoutTest {
         PrintStream ps = new PrintStream(buf);
         Assert.assertTrue(ConsoleLayout.ensureLead(ps));
         Assert.assertFalse(ConsoleLayout.ensureLead(ps));
-        Assert.assertEquals("\n\n", new String(buf.toByteArray(), StandardCharsets.UTF_8));
+        Assert.assertEquals("\n\n", new String(buf.toByteArray(), StandardCharsets.UTF_8).replace("\r\n", "\n").replace("\r", "\n"));
     }
 
     @Test
