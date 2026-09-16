@@ -7,6 +7,7 @@
 #   dist/jfa-linux/bin/jfa-config
 #   dist/jfa-linux/lib/jfa.jar
 #   dist/jfa-linux/conf/jfa.properties
+#   dist/jfa-linux/run/          (jfa-console.pid)
 #   dist/jfa-linux/docs/
 #   dist/jfa-linux/reportfile/
 set -euo pipefail
@@ -32,7 +33,7 @@ fi
 
 DEST="$ROOT/dist/jfa-linux"
 rm -rf "$DEST"
-mkdir -p "$DEST/bin" "$DEST/lib" "$DEST/conf" "$DEST/docs" "$DEST/testdata" "$DEST/reportfile"
+mkdir -p "$DEST/bin" "$DEST/lib" "$DEST/conf" "$DEST/docs" "$DEST/testdata" "$DEST/reportfile" "$DEST/run"
 
 cp -f "$ROOT/jfa-cli/target/jfa-cli-1.0.0.jar" "$DEST/lib/jfa.jar"
 cp -f "$ROOT/conf/jfa.properties" "$DEST/conf/jfa.properties"
@@ -63,4 +64,5 @@ echo "Try: $DEST/bin/jfa --help"
 echo "     $DEST/bin/jfa-analyze"
 echo "     $DEST/bin/jfa-file-analyze"
 echo "     $DEST/bin/jfa-collect"
-echo "     $DEST/bin/jfa-config"
+echo "     $DEST/bin/jfa start"
+echo "     $DEST/bin/jfa stop"

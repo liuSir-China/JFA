@@ -99,6 +99,10 @@ jfa evidence gc --service order-svc
 
 JFA 仅在本机读写证据与报告，无上传、无外发能力。
 
+## Web 控制台
+
+`./jfa start` 在本机启动内置 `HttpServer`（无 Spring），浏览 `http://<ip>:<port>/jfa`。`./jfa stop` 按 `<install>/run/jfa-console.pid` 停止。灰卡确认「首次分析此项目，是否开始分析」后等价于对该 pid 执行 `jfa-analyze`（UI 确认 = `--confirm`）。
+
 ## 测试数据
 
 仓库 `testdata/` 含死锁 jstack、GC 螺旋日志、OOM 栈、健康 dump 与分级证据目录。E3 hprof 由测试在 JDK 8 上现场生成无界缓存样例。

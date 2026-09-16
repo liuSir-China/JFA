@@ -40,6 +40,9 @@ public class JfaConfigPropertiesTest {
         Assert.assertTrue(all.contains("sample.count="));
         Assert.assertTrue(all.contains("log.lookback.minutes="));
         Assert.assertTrue(all.contains("compare.top.n="));
+        Assert.assertTrue(all.contains("console.port=8080"));
+        Assert.assertTrue(all.contains("console.bind=0.0.0.0"));
+        Assert.assertTrue(all.contains("./jfa start"));
         Assert.assertFalse(all.contains("require.confirm"));
         Assert.assertFalse(all.contains("trading.hours"));
         Assert.assertFalse(all.contains("outbound.enabled"));
@@ -51,6 +54,21 @@ public class JfaConfigPropertiesTest {
         Assert.assertEquals(10, cfg.getLogLookbackMinutes());
         Assert.assertEquals(20, cfg.getCompareTopN());
         Assert.assertNull(cfg.getCompareAfter());
+        Assert.assertEquals(8080, cfg.getConsolePort());
+        Assert.assertEquals("0.0.0.0", cfg.getConsoleBind());
+        boolean firstProp = true;
+        for (String raw : lines) {
+            String line = raw.trim();
+            if (line.isEmpty() || line.startsWith("#") || line.startsWith("!")) {
+                continue;
+            }
+            if (firstProp) {
+                Assert.assertTrue("console.port must be the first property: " + line,
+                        line.startsWith("console.port="));
+                firstProp = false;
+            }
+        }
+        Assert.assertFalse(firstProp);
     }
 
     @Test

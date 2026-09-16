@@ -7,7 +7,7 @@ public final class HelpText {
     public static String mainHelp() {
         return ""
                 + "======== JFA — 内网 JVM 故障诊断助手 ========\n"
-                + "主路径：诊断已有服务，无需 jfa start。\n"
+                + "主路径：诊断已有服务，不必先改目标 JVM 启动参数。CLI 不依赖 Web 控制台。\n"
                 + "本产品执行短时堆代采样、应用日志倒查、以及双 hprof 对比；不要把“请自行查日志/对比 dump”当主路径。\n\n"
                 + "安装包五个命令（bin/）:\n"
                 + "  jfa                      # 列出可分析的 Java 进程（原 jfa discover）\n"
@@ -16,10 +16,14 @@ public final class HelpText {
                 + "  jfa-file-analyze         # 离线分析（原 jfa analyze）\n"
                 + "  jfa-collect              # 采集（原 jfa collect）\n"
                 + "  jfa-config               # 与 jfa help 相同：推荐 JVM 配置\n\n"
+                + "Web 控制台（./jfa 子命令，不是第六个 bin 文件）:\n"
+                + "  jfa start                # 后台启动控制台，PID 文件 <install>/run/jfa-console.pid\n"
+                + "  jfa stop                 # 按 PID 文件停止\n"
+                + "  浏览器: http://<ip>:<port>/jfa  （console.port / console.bind 见 conf/jfa.properties）\n\n"
                 + "无参数时：jfa-analyze / jfa-file-analyze / jfa-collect 打印各自参数说明。\n\n"
                 + "java -jar 兼容子命令（测试与脚本仍可用）:\n"
                 + "  discover | diagnose | analyze | collect | help | config recommend\n"
-                + "  register | evidence | status | show\n\n"
+                + "  register | evidence | status | show | start | stop\n\n"
                 + "用法:\n"
                 + "  jfa-analyze --pid <pid> [--type auto|memory|thread] [--confirm]\n"
                 + "  jfa-file-analyze --hprof file [--hprof-prev file] [--type memory]\n"
@@ -143,5 +147,20 @@ public final class HelpText {
                 + "说明:\n"
                 + "  heap dump 有 STW / 磁盘 / 服务影响；无 --confirm 且非交互时不会生成 hprof。\n"
                 + "  java -jar 兼容：collect heapdump --pid n --confirm\n";
+    }
+
+    public static String consoleHelp() {
+        return ""
+                + "======== jfa start / stop Web 控制台 ========\n"
+                + "在安装目录启动内置 HttpServer（无 Spring）。静态页与 API 均在 /jfa。\n\n"
+                + "用法:\n"
+                + "  jfa start                # 包装脚本后台启动；java -jar 则为前台监听\n"
+                + "  jfa stop                 # 读取 <install>/run/jfa-console.pid 并停止\n\n"
+                + "浏览器:\n"
+                + "  http://<ip>:<port>/jfa\n\n"
+                + "配置（conf/jfa.properties 顶部）:\n"
+                + "  console.port=8080\n"
+                + "  console.bind=0.0.0.0\n\n"
+                + "页面只展示监控卡片：已分析 / 未分析计数、四列卡片。蓝卡打开最新报告，灰卡确认后按 jfa-analyze --pid 分析。\n";
     }
 }

@@ -4,7 +4,7 @@
 
 | 命令 | 作用 |
 | --- | --- |
-| `jfa` | 列出可分析的 Java 进程（原 `jfa discover`）。`jfa --help` / `jfa help` → 推荐 JVM 配置 |
+| `jfa` | 列出可分析的 Java 进程（原 `jfa discover`）。`jfa --help` / `jfa help` → 推荐 JVM 配置。`jfa start` / `jfa stop` → Web 控制台 |
 | `jfa-analyze` | 活体诊断（原 `jfa diagnose`）。无参数打印中文参数说明 |
 | `jfa-file-analyze` | 离线分析（原 `jfa analyze`）。无参数打印中文参数说明 |
 | `jfa-collect` | 采集 heapdump/sample/threaddump。无参数打印中文参数说明 |
@@ -18,6 +18,13 @@
 JSON 报告: <绝对路径>.json
 ```
 
+可选 Web 控制台（监控卡片）：
+
+```bash
+./jfa start
+# 浏览器 http://<ip>:<port>/jfa   （conf/jfa.properties 顶部 console.port / console.bind）
+./jfa stop
+```
 
 内网 JVM 故障诊断助手。面向 **JDK 8** Linux 现场：对**已运行或已故障**的 Java 服务采集/利用本地证据，输出可执行的研发修改建议（text + JSON）。覆盖 **Java 堆 OOM** 与 **线程死锁**，并支持无异常时的一键健康体检。数据默认不出域。
 
@@ -76,7 +83,7 @@ jfa config recommend
 
 - `jfa-common` — 错误码、报告 schema 2.1、配置
 - `jfa-core` — 发现/登记/采集/死锁引擎/OOM E0–E3/采样/日志倒查/堆对比/报告
-- `jfa-cli` — Linux CLI
+- `jfa-cli` — Linux CLI 与内置 Web 控制台（`com.sun.net.httpserver.HttpServer`）
 
 ## 文档
 

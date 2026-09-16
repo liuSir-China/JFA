@@ -27,6 +27,8 @@ public class JfaConfig {
     private int logLookbackMinutes = 10;
     private int compareTopN = 20;
     private String compareAfter;
+    private int consolePort = 8080;
+    private String consoleBind = "0.0.0.0";
     private File configFile;
 
     public static JfaConfig load(File configFile) {
@@ -91,6 +93,11 @@ public class JfaConfig {
         String after = p.getProperty("compare.after");
         if (after != null && !after.trim().isEmpty()) {
             this.compareAfter = after.trim();
+        }
+        this.consolePort = intProp(p, "console.port", consolePort);
+        String bind = p.getProperty("console.bind");
+        if (bind != null && !bind.trim().isEmpty()) {
+            this.consoleBind = bind.trim();
         }
     }
 
@@ -249,6 +256,35 @@ public class JfaConfig {
 
     public File getConfigFile() {
         return configFile;
+    }
+
+    /**
+     * Web console HTTP port ({@code console.port}). {@code 0} means an ephemeral port.
+     */
+    public int getConsolePort() {
+        return consolePort;
+    }
+
+    public void setConsolePort(int consolePort) {
+        this.consolePort = consolePort;
+    }
+
+    /**
+     * Web console bind address ({@code console.bind}). Default {@code 0.0.0.0}.
+     */
+    public String getConsoleBind() {
+        return consoleBind == null || consoleBind.trim().isEmpty() ? "0.0.0.0" : consoleBind;
+    }
+
+    public void setConsoleBind(String consoleBind) {
+        this.consoleBind = consoleBind;
+    }
+
+    /**
+     * Runtime dir for the console PID file: {@code <install>/run}.
+     */
+    public File getRunRoot() {
+        return new File(InstallHome.detect(configFile), "run").getAbsoluteFile();
     }
 
     public File serviceDir(String serviceId) {
