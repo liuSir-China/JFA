@@ -1,2 +1,7 @@
 *.sh text eol=lf
+scripts/jfa text eol=lf
+scripts/jfa-analyze text eol=lf
+scripts/jfa-file-analyze text eol=lf
+scripts/jfa-collect text eol=lf
+scripts/jfa-config text eol=lf
 scripts/jfa-launcher.sh text eol=lf

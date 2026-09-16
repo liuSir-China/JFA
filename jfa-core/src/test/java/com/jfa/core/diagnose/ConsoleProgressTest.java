@@ -1,6 +1,9 @@
 package com.jfa.core.diagnose;
 
+import com.jfa.common.io.ConsoleLayout;
 import org.junit.Assert;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
@@ -9,6 +12,16 @@ import java.nio.charset.StandardCharsets;
 
 public class ConsoleProgressTest {
 
+    @Before
+    public void setUp() {
+        ConsoleLayout.resetSession();
+    }
+
+    @After
+    public void tearDown() {
+        ConsoleLayout.resetSession();
+    }
+
     @Test
     public void defaultPrintsMainStepsNotDetails() throws Exception {
         ByteArrayOutputStream buf = new ByteArrayOutputStream();
@@ -16,7 +29,7 @@ public class ConsoleProgressTest {
         p.step("生成报告 …");
         p.detail("不应出现");
         String s = new String(buf.toByteArray(), StandardCharsets.UTF_8).replace("\r\n", "\n");
-        Assert.assertEquals("[JFA] 生成报告 …\n", s);
+        Assert.assertEquals("\n\n[JFA] 生成报告 …\n", s);
     }
 
     @Test
@@ -39,7 +52,8 @@ public class ConsoleProgressTest {
         ConsoleProgress p = new ConsoleProgress(new PrintStream(buf, true, "UTF-8"), true, true);
         p.step("复用已有 hprof → /tmp/a.hprof");
         p.detail("已纳入运行目录 /tmp/run/heap/a.hprof");
-        String s = new String(buf.toByteArray(), StandardCharsets.UTF_8);
+        String s = new String(buf.toByteArray(), StandardCharsets.UTF_8).replace("\r\n", "\n");
+        Assert.assertTrue(s.startsWith("\n\n"));
         Assert.assertTrue(s.contains("[JFA] 复用已有 hprof → /tmp/a.hprof"));
         Assert.assertTrue(s.contains("[JFA] 已纳入运行目录 /tmp/run/heap/a.hprof"));
     }

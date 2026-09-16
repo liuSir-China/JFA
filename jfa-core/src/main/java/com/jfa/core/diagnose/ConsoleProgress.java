@@ -1,9 +1,10 @@
 package com.jfa.core.diagnose;
 
+import com.jfa.common.io.ConsoleLayout;
+
 import java.io.PrintStream;
 
-/**
- * Default-on step progress for {@code diagnose}/{@code analyze}.
+/** * Default-on step progress for {@code diagnose}/{@code analyze}.
  * Mid-run lines go to stderr so JSON stdout stays parseable; {@code --quiet}
  * suppresses them. {@code --verbose} may add extra detail but is not required
  * to see the main steps.
@@ -54,10 +55,10 @@ public final class ConsoleProgress {
         if (detailOnly && !verbose) {
             return;
         }
+        ConsoleLayout.ensureLead(out);
         out.println(PREFIX + message);
         out.flush();
     }
-
     /**
      * Human-readable duration for wait / sample messages (JDK 8, no {@code Duration}).
      */

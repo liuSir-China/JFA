@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export JFA_CMD=jfa-config
+HERE="$(cd "$(dirname "$0")" && pwd)"
+exec "$HERE/jfa-launcher.sh" "$@"

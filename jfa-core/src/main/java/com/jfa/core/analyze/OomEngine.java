@@ -147,11 +147,10 @@ public class OomEngine {
             a.sectionStatus = "degraded";
             a.oneLineFault = "日志级 OOM 初诊（E2）：" + (stack.detail == null ? "heap OOM" : stack.detail)
                     + "。不能做精确对象归因。";
-            a.missing.add("hprof（`jfa diagnose --pid <pid> --type memory --confirm` 或 `--hprof`）");
+            a.missing.add("hprof（`jfa-analyze --pid <pid> --type memory --confirm` 或 `--hprof`）");
             a.next.add("由本产品采集或传入 hprof 后复跑 --type memory");
             a.recommendations = e2Recommendations(stack, trend);
-        } else if (trend.available && !stack.found) {
-            a.level = EvidenceLevel.E2;
+        } else if (trend.available && !stack.found) {            a.level = EvidenceLevel.E2;
             a.confidence = Confidence.MEDIUM;
             a.oomConfirmed = false;
             a.oomSubtype = "none";
@@ -179,10 +178,10 @@ public class OomEngine {
             if (dumpRefused) {
                 a.capabilityLimit = "用户未确认活体 heap dump：不能做对象级堆归因；采样与日志倒查仍由本产品执行。";
                 a.missing.add("hprof（用户拒绝或未触发活体 dump）");
-                a.next.add("确认后执行 jfa diagnose --pid <pid> --type memory --confirm");
+                a.next.add("确认后执行 jfa-analyze --pid <pid> --type memory --confirm");
             } else {
                 a.missing.add("hprof");
-                a.next.add("进程仍存活时 `jfa diagnose --pid <pid> --type memory --confirm`，或传入 `--hprof`");
+                a.next.add("进程仍存活时 `jfa-analyze --pid <pid> --type memory --confirm`，或传入 `--hprof`");
             }
             if (commandLine != null && commandLine.contains("-Xmx")) {
                 a.riskHints.add("命令行含堆参数（" + extractXmx(commandLine) + "），无 hprof 时仅作基线——非根因");
@@ -224,11 +223,10 @@ public class OomEngine {
     private static Recommendations e2Recommendations(AppLogAnalyzer.OomStack stack, GcLogAnalyzer.GcTrend trend) {
         Recommendations r = new Recommendations();
         r.getOps().add(new Recommendation("REC-OPS-01",
-                "由本产品补第二份 hprof：活体 `jfa diagnose --pid <pid> --type memory --confirm`，或离线 `--hprof` / `--hprof-prev`。",
+                "由本产品补第二份 hprof：活体 `jfa-analyze --pid <pid> --type memory --confirm`，或离线 `--hprof` / `--hprof-prev`。",
                 "当前无对象级直方图，双快照对比与采样/日志倒查由本产品执行。",
                 "取得 hprof 后报告应出现 Top 类与堆对比判读。"));
-        if (trend.oldRising) {
-            r.getCapacity().add(new Recommendation("REC-CAP-01",
+        if (trend.oldRising) {            r.getCapacity().add(new Recommendation("REC-CAP-01",
                     "临时评估 Full GC 频率与 -Xmx，但不能当作根因修复。",
                     trend.summary,
                     "观察 Full GC 后老年代是否回落；回落差则倾向泄漏而非单纯容量。"));
@@ -239,21 +237,19 @@ public class OomEngine {
     private static Recommendations e1Recommendations(AppLogAnalyzer.OomStack stack) {
         Recommendations r = new Recommendations();
         r.getOps().add(new Recommendation("REC-OPS-01",
-                "指定 `--hprof` 或对仍存活进程执行 `jfa diagnose --pid <pid> --type memory --confirm`。",
+                "指定 `--hprof` 或对仍存活进程执行 `jfa-analyze --pid <pid> --type memory --confirm`。",
                 "仅有 OOM 栈时本产品不能做对象级归因；日志倒查已由本产品完成。",
                 "补 hprof 后报告出现 Top 类。"));
-        return r;
-    }
+        return r;    }
 
     private static Recommendations healthMemoryRecommendations(boolean dumpRefused) {
         Recommendations r = new Recommendations();
         r.getOps().add(new Recommendation("REC-OPS-01",
                 dumpRefused
-                        ? "需要对象级归因时：`jfa diagnose --pid <pid> --type memory --confirm`（本产品采集并分析）。"
+                        ? "需要对象级归因时：`jfa-analyze --pid <pid> --type memory --confirm`（本产品采集并分析）。"
                         : "无硬性代码修改建议。需要对象级归因时由本产品 `--confirm` 采集 hprof，或传入 `--hprof`。",
                 dumpRefused ? "未取得 hprof，不能做对象级堆归因。" : "健康体检弱结论，禁止硬编根因。",
-                "复跑后对照 heap_oom_evidence_found 与 Top 类是否出现。"));
-        return r;
+                "复跑后对照 heap_oom_evidence_found 与 Top 类是否出现。"));        return r;
     }
 
     private static String retentionPath(String holder, HprofParser.HprofSummary sum,

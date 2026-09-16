@@ -10,11 +10,10 @@ public final class RecommendedJvmConfig {
         StringBuilder sb = new StringBuilder();
         sb.append(JfaConstants.EVIDENCE_ENHANCE_OPTIONAL).append('\n');
         sb.append(JfaConstants.NOT_A_PREREQUISITE).append('\n');
-        sb.append("诊断已有服务请直接：jfa diagnose --pid <pid>\n");
+        sb.append("诊断已有服务请直接：jfa-analyze --pid <pid>\n");
         sb.append("以下均为可选证据增强，不是使用本产品的前提；补参数只提高下次故障的事后归因上限。\n\n");
 
-        sb.append("======== 启用 GC 日志（JDK 8）========\n");
-        sb.append("| 参数 | 作用 |\n");
+        sb.append("======== 启用 GC 日志（JDK 8）========\n");        sb.append("| 参数 | 作用 |\n");
         sb.append("|------|------|\n");
         sb.append("| -XX:+PrintGCDetails | 打印详细 GC 事件 |\n");
         sb.append("| -XX:+PrintGCDateStamps | GC 行带日历时间戳 |\n");

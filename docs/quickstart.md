@@ -7,8 +7,8 @@
 不要执行 start，不要先改启动脚本。
 
 ```bash
-jfa discover
-jfa diagnose --pid <pid>
+jfa
+jfa-analyze --pid <pid>
 ```
 
 默认全量（内存 + 线程）。当前无 OOM、无死锁时，报告为**健康体检**：否定结论 + 可选风险提示，不会硬编根因。
@@ -16,16 +16,16 @@ jfa diagnose --pid <pid>
 只看一侧：
 
 ```bash
-jfa diagnose --pid <pid> --type memory
-jfa diagnose --pid <pid> --type thread
-jfa diagnose --pid <pid> --type memory --compare-after 15m --confirm
+jfa-analyze --pid <pid> --type memory
+jfa-analyze --pid <pid> --type thread
+jfa-analyze --pid <pid> --type memory --compare-after 15m --confirm
 ```
 
 ## 2. 按服务名（可选登记，不托管生命周期）
 
 ```bash
 jfa register --name order-svc --pid <pid> --app-log /var/log/order-svc/app.log
-jfa diagnose --service order-svc
+jfa-analyze --service order-svc
 ```
 
 `lifecycle_managed_by_jfa` 恒为 false。登记不会启动或停止目标进程。
@@ -33,10 +33,10 @@ jfa diagnose --service order-svc
 ## 3. 只有落盘证据（进程已死）
 
 ```bash
-jfa analyze --evidence-dir /var/jfa/order-svc
-jfa analyze --hprof ./heap/java_pid.hprof --gc-log ./gc/gc.log --type memory
-jfa analyze --hprof ./heap/newer.hprof --hprof-prev ./heap/older.hprof --type memory
-jfa analyze --thread-dump ./threads/td.txt --type thread
+jfa-file-analyze --evidence-dir /var/jfa/order-svc
+jfa-file-analyze --hprof ./heap/java_pid.hprof --gc-log ./gc/gc.log --type memory
+jfa-file-analyze --hprof ./heap/newer.hprof --hprof-prev ./heap/older.hprof --type memory
+jfa-file-analyze --thread-dump ./threads/td.txt --type thread
 ```
 
 有 hprof 时报告必须给出可行动修改建议（改什么 / 为什么 / 验证方式）。
@@ -46,9 +46,9 @@ jfa analyze --thread-dump ./threads/td.txt --type thread
 heap dump 有 STW / 磁盘 / 服务影响。交互终端会询问 y/n；脚本请使用 `--confirm`（等同于回答 y）：
 
 ```bash
-jfa collect threaddump --pid <pid>
-jfa collect heapdump --pid <pid> --confirm
-jfa collect sample --pid <pid> --interval 5s --duration 60s --confirm
+jfa-collect threaddump --pid <pid>
+jfa-collect heapdump --pid <pid> --confirm
+jfa-collect sample --pid <pid> --interval 5s --duration 60s --confirm
 ```
 
 无确认时不会生成 hprof。`diagnose` 对活体 pid 会优先复用目标 JVM 已有 hprof/GC（并复制进本轮 `reportfile` 目录），证据不足才采集。诊断内短时 `jstat -gcutil` 采样与日志倒查由产品自动执行。
@@ -57,7 +57,7 @@ jfa collect sample --pid <pid> --interval 5s --duration 60s --confirm
 
 ```bash
 jfa help
-jfa help config
+jfa-config
 jfa config recommend
 ```
 
@@ -69,3 +69,8 @@ jfa config recommend
 ./scripts/package-linux.sh
 ./dist/jfa-linux/bin/jfa help
 ```
+
+
+## 控制台输出
+
+`jfa-analyze` / `jfa-file-analyze` 默认向 stderr 打印 `[JFA]` 进度；结束后只打印报告绝对路径（不打印报告正文）。`--format json` 时 JSON 在 stdout，路径在 stderr。

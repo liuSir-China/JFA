@@ -19,13 +19,14 @@ public class CliCommandsTest {
     @Test
     public void helpAndHelpConfigAndRecommend() {
         Capture c = run(0, "help");
-        Assert.assertTrue(c.out.contains("diagnose"));
+        Assert.assertTrue(c.out.contains("jfa-analyze") || c.out.contains("diagnose"));
         Assert.assertTrue(c.out.contains("--type"));
         Assert.assertTrue(c.out.contains("--compare-after"));
         Assert.assertTrue(c.out.contains("--hprof-prev"));
         Assert.assertTrue(c.out.contains("--quiet"));
         Assert.assertTrue(c.out.contains("[JFA]"));
-        Assert.assertTrue(c.out.contains("help config"));
+        Assert.assertTrue(c.out.contains("jfa-config") || c.out.contains("help config"));
+        Assert.assertTrue(c.out.startsWith("\n\n") || c.out.startsWith("\r\n\r\n"));
         Assert.assertFalse(c.out.contains("第一步") && c.out.contains("jfa start"));
         Assert.assertTrue(c.out.contains("无需 jfa start") || c.out.contains("不要先 start")
                 || c.out.contains("无需 jfa start"));
@@ -68,10 +69,14 @@ public class CliCommandsTest {
                 "--type", "thread",
                 "--format", "both",
                 "--out", tmp.newFolder("out-d").getAbsolutePath());
-        Assert.assertTrue(deadlock.out.contains("死锁") || deadlock.out.contains("deadlock"));
-        Assert.assertFalse(deadlock.out.toLowerCase().contains("mat"));
+        Assert.assertTrue(deadlock.out.contains("报告已写入"));
         Assert.assertTrue(deadlock.out.contains("报告文件") || deadlock.out.contains("JSON 报告"));
-        Assert.assertFalse(deadlock.out.contains("## 7"));
+        Assert.assertFalse("console must not dump report body", deadlock.out.contains("## 1. 结论"));
+        Assert.assertFalse(deadlock.out.toLowerCase().contains("mat"));
+        File deadReport = reportFileFromFooter(deadlock.out);
+        Assert.assertTrue(deadReport.isFile());
+        String deadBody = new String(java.nio.file.Files.readAllBytes(deadReport.toPath()), StandardCharsets.UTF_8);
+        Assert.assertTrue(deadBody.contains("死锁") || deadBody.contains("deadlock"));
 
         Capture health = run(0, "analyze",
                 "--evidence-dir", new File(testdata, "evidence/health-check").getAbsolutePath(),
@@ -148,8 +153,9 @@ public class CliCommandsTest {
                 "--evidence-dir", new File(testdata, "evidence/health-check").getAbsolutePath(),
                 "--type", "auto",
                 "--format", "text");
+        Assert.assertTrue(c.out.contains("报告已写入"));
         Assert.assertTrue(c.out.contains("报告文件:"));
-        Assert.assertTrue(c.out.contains("健康体检"));
+        Assert.assertFalse("console must not dump report body", c.out.contains("健康体检") && c.out.contains("## 1"));
         String marker = "报告文件:";
         int i = c.out.indexOf(marker);
         Assert.assertTrue(i >= 0);
@@ -196,6 +202,46 @@ public class CliCommandsTest {
         Assert.assertFalse(verbose.out.contains("[JFA]"));
         Assert.assertTrue(verbose.err.contains("[JFA] 开始倒查近") || verbose.err.contains("[JFA] 定位应用日志"));
         Assert.assertTrue(verbose.err.contains("JSON 报告") || verbose.err.contains("报告文件"));
+    }
+
+
+    @Test
+    public void bareDiagnoseAnalyzeCollectPrintChineseHelp() {
+        Capture d = run(0, "diagnose");
+        Assert.assertTrue(d.out.contains("jfa-analyze") || d.out.contains("活体诊断"));
+        Assert.assertTrue(d.out.contains("--pid"));
+        Assert.assertTrue(d.out.contains("目标 Java 进程"));
+
+        Capture a = run(0, "analyze");
+        Assert.assertTrue(a.out.contains("jfa-file-analyze") || a.out.contains("离线分析"));
+        Assert.assertTrue(a.out.contains("--hprof") || a.out.contains("--evidence-dir"));
+
+        Capture c = run(0, "collect");
+        Assert.assertTrue(c.out.contains("jfa-collect") || c.out.contains("采集"));
+        Assert.assertTrue(c.out.contains("heapdump") || c.out.contains("threaddump"));
+    }
+
+    @Test
+    public void mapInvocationAliases() {
+        Assert.assertArrayEquals(new String[]{"discover"}, JfaMain.mapInvocation("jfa", new String[0]));
+        Assert.assertArrayEquals(new String[]{"help", "config"}, JfaMain.mapInvocation("jfa", new String[]{"--help"}));
+        Assert.assertArrayEquals(new String[]{"help", "config"}, JfaMain.mapInvocation("jfa", new String[]{"help"}));
+        Assert.assertArrayEquals(new String[]{"diagnose"}, JfaMain.mapInvocation("jfa-analyze", new String[0]));
+        Assert.assertArrayEquals(new String[]{"diagnose", "--pid", "1"},
+                JfaMain.mapInvocation("jfa-analyze", new String[]{"--pid", "1"}));
+        Assert.assertArrayEquals(new String[]{"diagnose", "--pid", "1"},
+                JfaMain.mapInvocation("jfa-analyze", new String[]{"diagnose", "--pid", "1"}));
+        Assert.assertArrayEquals(new String[]{"analyze"}, JfaMain.mapInvocation("jfa-file-analyze", new String[0]));
+        Assert.assertArrayEquals(new String[]{"collect"}, JfaMain.mapInvocation("jfa-collect", new String[0]));
+        Assert.assertArrayEquals(new String[]{"help", "config"}, JfaMain.mapInvocation("jfa-config", new String[0]));
+    }
+
+    private static File reportFileFromFooter(String out) {
+        String marker = "报告文件:";
+        int i = out.indexOf(marker);
+        Assert.assertTrue("missing report path footer: " + out, i >= 0);
+        String pathLine = out.substring(i + marker.length()).trim().split("\\r?\\n")[0].trim();
+        return new File(pathLine);
     }
 
     private File writeConfig(File home) throws Exception {

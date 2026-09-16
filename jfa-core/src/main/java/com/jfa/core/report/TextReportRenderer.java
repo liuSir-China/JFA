@@ -14,6 +14,24 @@ import java.util.Map;
 
 public class TextReportRenderer {
 
+    /** Console footer banner after diagnose/analyze; never dump the report body. */
+    public static final String REPORT_WRITTEN_BANNER = "======== 报告已写入 ========";
+
+    /**
+     * Path-only footer for the CLI. The markdown/text body belongs in the file, not stdout.
+     */
+    public static String renderWriteFooter(java.io.File textFile, java.io.File jsonFile) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(REPORT_WRITTEN_BANNER).append('\n');
+        if (textFile != null) {
+            sb.append("报告文件: ").append(textFile.getAbsolutePath()).append('\n');
+        }
+        if (jsonFile != null) {
+            sb.append("JSON 报告: ").append(jsonFile.getAbsolutePath()).append('\n');
+        }
+        return sb.toString();
+    }
+
     public String render(DiagnoseReport report) {
         StringBuilder sb = new StringBuilder();
         boolean health = ReportMode.HEALTH_CHECK.wireName().equals(report.getReportMode());

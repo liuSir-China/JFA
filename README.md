@@ -1,5 +1,24 @@
 # JFA（JVM Forensics & Diagnostics Assistant）
 
+## 五个命令（Linux 安装包 bin/）
+
+| 命令 | 作用 |
+| --- | --- |
+| `jfa` | 列出可分析的 Java 进程（原 `jfa discover`）。`jfa --help` / `jfa help` → 推荐 JVM 配置 |
+| `jfa-analyze` | 活体诊断（原 `jfa diagnose`）。无参数打印中文参数说明 |
+| `jfa-file-analyze` | 离线分析（原 `jfa analyze`）。无参数打印中文参数说明 |
+| `jfa-collect` | 采集 heapdump/sample/threaddump。无参数打印中文参数说明 |
+| `jfa-config` | 推荐 JVM 配置（原 `jfa help config`） |
+
+诊断/分析结束后控制台**不**打印报告正文，只打印：
+
+```
+======== 报告已写入 ========
+报告文件: <绝对路径>.md
+JSON 报告: <绝对路径>.json
+```
+
+
 内网 JVM 故障诊断助手。面向 **JDK 8** Linux 现场：对**已运行或已故障**的 Java 服务采集/利用本地证据，输出可执行的研发修改建议（text + JSON）。覆盖 **Java 堆 OOM** 与 **线程死锁**，并支持无异常时的一键健康体检。数据默认不出域。
 
 有 hprof 时本产品独立给出可行动结论，不以任何外部 hprof 查看工具为交付补充。

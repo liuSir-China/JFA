@@ -504,11 +504,10 @@ public class DiagnoseOrchestrator {
                 sec.getQualification().put("deadlock_found", false);
                 sec.getMissingEvidence().add("历史 thread dump（进程已死且无落盘 dump，无法还原死锁现场）");
                 sec.getNextMinimalActions().add(
-                        "jfa collect threaddump --pid <pid> 或传入 --thread-dump 后复跑 --type thread");
+                        "jfa-collect threaddump --pid <pid> 或传入 --thread-dump 后复跑 --type thread");
                 report.getSections().add(sec);
                 report.getEvidence().add(new EvidenceItem("EV-TD-MISS", "thread_dump", "", false, "缺失"));
-                return null;
-            }
+                return null;            }
             sec.setStatus("failed");
             sec.setNote("未能采集 thread dump");
             report.getSections().add(sec);
@@ -667,11 +666,10 @@ public class DiagnoseOrchestrator {
         }
         sec.getQualification().put("hits", hits);
         if (lookback.unresolvedNote != null) {
-            sec.getNextMinimalActions().add("jfa diagnose ... --app-log <file>");
+            sec.getNextMinimalActions().add("jfa-analyze ... --app-log <file>");
         }
         report.getSections().add(sec);
     }
-
     private void addCompareSection(DiagnoseReport report, HprofComparer.CompareResult compare, EvidencePack pack) {
         ReportSection sec = new ReportSection();
         sec.setType("heap_compare");

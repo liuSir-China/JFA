@@ -63,14 +63,13 @@ if not exist "%PROJECT%\scripts\jfa-launcher.sh" (
   echo [ERROR] missing scripts\jfa-launcher.sh
   goto :FAIL
 )
-REM Write launcher with Unix LF endings (avoid bash\r on Linux).
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$src='%PROJECT%\scripts\jfa-launcher.sh'; $dst='%DEST%\bin\jfa'; $t=[IO.File]::ReadAllText($src) -replace [char]13+[char]10,[char]10 -replace [char]13,[char]10; if(-not $t.EndsWith([string][char]10)){$t+=[char]10}; [IO.File]::WriteAllBytes($dst,[Text.UTF8Encoding]::new($false).GetBytes($t))"
-if errorlevel 1 (echo [ERROR] write bin\jfa failed & goto :FAIL)
+REM Write bin wrappers with Unix LF endings (avoid bash\r on Linux).
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$names=@('jfa-launcher.sh','jfa','jfa-analyze','jfa-file-analyze','jfa-collect','jfa-config'); foreach($n in $names){ $src='%PROJECT%\scripts\'+$n; if(-not (Test-Path -LiteralPath $src)){ throw ('missing '+$src) }; $dst='%DEST%\bin\'+$n; $t=[IO.File]::ReadAllText($src) -replace [char]13+[char]10,[char]10 -replace [char]13,[char]10; if(-not $t.EndsWith([string][char]10)){ $t+=[char]10 }; [IO.File]::WriteAllBytes($dst,[Text.UTF8Encoding]::new($false).GetBytes($t)) }"
+if errorlevel 1 (echo [ERROR] write bin wrappers failed & goto :FAIL)
 
 echo [3/4] Create %TAR_NAME% ...
 pushd "%PROJECT%\dist"
-tar -czf "%TAR_NAME%" "%PKG_NAME%"
-if errorlevel 1 (popd & echo [ERROR] tar failed & goto :FAIL)
+tar -czf "%TAR_NAME%" "%PKG_NAME%"if errorlevel 1 (popd & echo [ERROR] tar failed & goto :FAIL)
 popd
 
 echo [4/4] Copy to parent folder and remove old source tarball ...
@@ -86,11 +85,14 @@ echo.
 echo Linux:
 echo   tar -xzf %TAR_NAME%
 echo   export JAVA_HOME=/path/to/jdk8
-echo   ./%PKG_NAME%/bin/jfa help
+echo   ./%PKG_NAME%/bin/jfa --help
+echo   ./%PKG_NAME%/bin/jfa-analyze
+echo   ./%PKG_NAME%/bin/jfa-file-analyze
+echo   ./%PKG_NAME%/bin/jfa-collect
+echo   ./%PKG_NAME%/bin/jfa-config
 echo.
 pause
 exit /b 0
-
 :FAIL
 echo.
 echo FAILED.

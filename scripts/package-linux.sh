@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Build the JDK 8 Linux CLI layout:
 #   dist/jfa-linux/bin/jfa
+#   dist/jfa-linux/bin/jfa-analyze
+#   dist/jfa-linux/bin/jfa-file-analyze
+#   dist/jfa-linux/bin/jfa-collect
+#   dist/jfa-linux/bin/jfa-config
 #   dist/jfa-linux/lib/jfa.jar
 #   dist/jfa-linux/conf/jfa.properties
 #   dist/jfa-linux/docs/
@@ -39,9 +43,24 @@ if [[ -f "$ROOT/docs/user-manual.md" ]]; then
 fi
 cp -R "$ROOT/testdata/." "$DEST/testdata/"
 
-# Copy launcher with Unix LF only (CRLF makes bash fail with $'\r').
-tr -d '\r' < "$ROOT/scripts/jfa-launcher.sh" > "$DEST/bin/jfa"
-chmod +x "$DEST/bin/jfa"
+# Copy launchers with Unix LF only (CRLF makes bash fail with $'\r').
+copy_lf() {
+  local src="$1"
+  local dst="$2"
+  tr -d '\r' < "$src" > "$dst"
+  chmod +x "$dst"
+}
+
+copy_lf "$ROOT/scripts/jfa-launcher.sh" "$DEST/bin/jfa-launcher.sh"
+copy_lf "$ROOT/scripts/jfa" "$DEST/bin/jfa"
+copy_lf "$ROOT/scripts/jfa-analyze" "$DEST/bin/jfa-analyze"
+copy_lf "$ROOT/scripts/jfa-file-analyze" "$DEST/bin/jfa-file-analyze"
+copy_lf "$ROOT/scripts/jfa-collect" "$DEST/bin/jfa-collect"
+copy_lf "$ROOT/scripts/jfa-config" "$DEST/bin/jfa-config"
 
 echo "Packaged: $DEST"
-echo "Try: $DEST/bin/jfa help"
+echo "Try: $DEST/bin/jfa --help"
+echo "     $DEST/bin/jfa-analyze"
+echo "     $DEST/bin/jfa-file-analyze"
+echo "     $DEST/bin/jfa-collect"
+echo "     $DEST/bin/jfa-config"

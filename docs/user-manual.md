@@ -66,15 +66,15 @@ JFA 分析**已有** Java 服务的本地证据，输出研发可直接据此修
 双 hprof 对比：
 
 ```bash
-jfa diagnose --pid <pid> --type memory --compare-after 15m --confirm
-jfa analyze --hprof newer.hprof --hprof-prev older.hprof --type memory
+jfa-analyze --pid <pid> --type memory --compare-after 15m --confirm
+jfa-file-analyze --hprof newer.hprof --hprof-prev older.hprof --type memory
 ```
 
 活体路径：dump1（复用已有可用 hprof，否则采集）→ 采样+日志倒查 → 等待 → dump2 → 本产品 diff。一次 `--confirm` 覆盖两次 dump。进程在等待中退出时保留 dump1 并按单快照分析。
 
 ## 控制台进度
 
-`jfa diagnose` / `jfa analyze` **默认**在运行过程中向 **stderr** 打印 `[JFA]` 分步进度，对应真实步骤（解析目标与运行目录、日志倒查、jstat 采样、hprof 复用或采集、线程分析、`--compare-after` 等待与对比、写报告）。`--format json` 时 stdout 仍是纯 JSON。结束后仍打印报告绝对路径（`报告文件` / `JSON 报告`）。`--quiet` 只关闭中途步骤，不关闭最终路径。`--verbose` 可附加更细的路径/体积信息；主步骤无需 `--verbose`。
+`jfa-analyze`（原 `jfa-analyze`） / `jfa-file-analyze`（原 `jfa-file-analyze`） **默认**在运行过程中向 **stderr** 打印 `[JFA]` 分步进度，对应真实步骤（解析目标与运行目录、日志倒查、jstat 采样、hprof 复用或采集、线程分析、`--compare-after` 等待与对比、写报告）。`--format json` 时 stdout 仍是纯 JSON。结束后仍打印报告绝对路径（`报告文件` / `JSON 报告`）。`--quiet` 只关闭中途步骤，不关闭最终路径。`--verbose` 可附加更细的路径/体积信息；主步骤无需 `--verbose`。
 
 ## 活体取证
 
@@ -102,3 +102,8 @@ JFA 仅在本机读写证据与报告，无上传、无外发能力。
 ## 测试数据
 
 仓库 `testdata/` 含死锁 jstack、GC 螺旋日志、OOM 栈、健康 dump 与分级证据目录。E3 hprof 由测试在 JDK 8 上现场生成无界缓存样例。
+
+
+## 控制台输出
+
+`jfa-analyze` / `jfa-file-analyze` 默认向 stderr 打印 `[JFA]` 进度；结束后只打印报告绝对路径（不打印报告正文）。`--format json` 时 JSON 在 stdout，路径在 stderr。
