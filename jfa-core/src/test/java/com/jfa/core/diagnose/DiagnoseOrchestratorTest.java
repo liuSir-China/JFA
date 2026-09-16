@@ -13,7 +13,9 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.PrintStream;
 
 public class DiagnoseOrchestratorTest {
     @Rule
@@ -119,6 +121,7 @@ public class DiagnoseOrchestratorTest {
         req.setMode(AnalysisMode.AUTO);
         req.setLiveCollect(false);
         req.setFormat(OutputFormat.BOTH);
+        req.setProgressStream(utf8Stream(new ByteArrayOutputStream()));
         DiagnoseResult r = new DiagnoseOrchestrator().run(req);
         Assert.assertNotNull(r.getTextFile());
         String path = r.getTextFile().getAbsolutePath().replace('\\', '/');
@@ -217,6 +220,71 @@ public class DiagnoseOrchestratorTest {
         Assert.assertTrue(hits.isFile());
     }
 
+    @Test
+    public void defaultProgressReflectsOfflineAnalyzeSteps() throws Exception {
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        DiagnoseRequest req = base(TestDataPaths.file("evidence/health-check"));
+        req.setThreadDump(TestDataPaths.file("evidence/health-check/threads/td.txt"));
+        req.setMode(AnalysisMode.AUTO);
+        req.setProgressStream(utf8Stream(buf));
+        new DiagnoseOrchestrator().run(req);
+        String steps = buf.toString("UTF-8").replace("\r\n", "\n");
+        Assert.assertTrue(steps.contains("[JFA] 解析证据目录"));
+        Assert.assertTrue(steps.contains("[JFA] 准备运行目录"));
+        Assert.assertTrue(steps.contains("[JFA] 复用已有 thread dump") || steps.contains("[JFA] 分析线程 dump"));
+        Assert.assertTrue(steps.contains("[JFA] 未发现死锁"));
+        Assert.assertTrue(steps.contains("[JFA] 定位应用日志"));
+        Assert.assertTrue(steps.contains("[JFA] 分析内存证据"));
+        Assert.assertTrue(steps.contains("[JFA] 生成报告"));
+    }
+
+    @Test
+    public void quietSuppressesMidRunProgress() throws Exception {
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        DiagnoseRequest req = base(TestDataPaths.file("evidence/health-check"));
+        req.setThreadDump(TestDataPaths.file("evidence/health-check/threads/td.txt"));
+        req.setMode(AnalysisMode.AUTO);
+        req.setQuiet(true);
+        req.setProgressStream(utf8Stream(buf));
+        DiagnoseResult r = new DiagnoseOrchestrator().run(req);
+        Assert.assertEquals("", buf.toString("UTF-8"));
+        Assert.assertNotNull(r.getTextFile());
+        Assert.assertTrue(r.getTextFile().isFile());
+    }
+
+    @Test
+    public void compareAndLookbackProgressAreRealWork() throws Exception {
+        File dir = tmp.newFolder("prog-cmp");
+        File older = new File(dir, "older.hprof");
+        File newer = new File(dir, "newer.hprof");
+        HeapDumpSupport.leakyDump(older);
+        com.jfa.testdata.UnboundedOrderCache.fillMore(700);
+        HeapDumpSupport.leakyDump(newer);
+        File log = new File(dir, "app.log");
+        long now = System.currentTimeMillis();
+        String ts = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                .withZone(java.time.ZoneId.systemDefault())
+                .format(java.time.Instant.ofEpochMilli(now - 30_000L));
+        java.nio.file.Files.write(log.toPath(),
+                (ts + " ERROR com.example - java.lang.OutOfMemoryError: Java heap space\n").getBytes("UTF-8"));
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        DiagnoseRequest req = base(dir);
+        req.setMode(AnalysisMode.MEMORY);
+        req.setHprof(newer);
+        req.setHprofPrev(older);
+        req.setAppLog(log);
+        req.setProgressStream(utf8Stream(buf));
+        new DiagnoseOrchestrator().run(req);
+        String steps = buf.toString("UTF-8");
+        Assert.assertTrue(steps.contains("[JFA] 复用已有 hprof"));
+        Assert.assertTrue(steps.contains("[JFA] 开始倒查近"));
+        Assert.assertTrue(steps.contains("[JFA] 日志倒查完成"));
+        Assert.assertTrue(steps.contains("[JFA] 开始对比 dump1 vs dump2"));
+        Assert.assertTrue(steps.contains("[JFA] 堆对比完成"));
+        Assert.assertTrue(steps.contains("[JFA] 生成报告"));
+        Assert.assertFalse(steps.contains("[JFA] 开始 jstat 采样"));
+    }
+
     private DiagnoseResult run(File evidenceDir, AnalysisMode mode, File hprof, File gc, File td) {
         DiagnoseRequest req = base(evidenceDir);
         req.setMode(mode);
@@ -239,7 +307,16 @@ public class DiagnoseOrchestratorTest {
         req.setConfirm(true);
         req.setFormat(OutputFormat.BOTH);
         req.setOutDir(new File(tmp.getRoot(), "reports"));
+        req.setProgressStream(utf8Stream(new ByteArrayOutputStream()));
         return req;
+    }
+
+    private static PrintStream utf8Stream(ByteArrayOutputStream buf) {
+        try {
+            return new PrintStream(buf, true, "UTF-8");
+        } catch (java.io.UnsupportedEncodingException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private static String joinNext(ReportSection sec) {

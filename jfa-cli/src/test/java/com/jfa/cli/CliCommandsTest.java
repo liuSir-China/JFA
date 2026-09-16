@@ -23,6 +23,8 @@ public class CliCommandsTest {
         Assert.assertTrue(c.out.contains("--type"));
         Assert.assertTrue(c.out.contains("--compare-after"));
         Assert.assertTrue(c.out.contains("--hprof-prev"));
+        Assert.assertTrue(c.out.contains("--quiet"));
+        Assert.assertTrue(c.out.contains("[JFA]"));
         Assert.assertTrue(c.out.contains("help config"));
         Assert.assertFalse(c.out.contains("第一步") && c.out.contains("jfa start"));
         Assert.assertTrue(c.out.contains("无需 jfa start") || c.out.contains("不要先 start")
@@ -82,6 +84,8 @@ public class CliCommandsTest {
         Assert.assertEquals("auto", report.getAnalysisMode());
         Assert.assertFalse(report.getSummary().isFabricatedRootCause());
         Assert.assertFalse(health.out.contains("disclaimer"));
+        Assert.assertFalse("JSON stdout must stay parseable", health.out.contains("[JFA]"));
+        Assert.assertTrue(health.err.contains("[JFA]"));
         Assert.assertTrue(health.err.contains("JSON 报告") || health.err.contains("报告文件"));
         Assert.assertTrue(health.err.contains("/") || health.err.contains("\\"));
 
@@ -156,6 +160,42 @@ public class CliCommandsTest {
         Assert.assertTrue(norm.contains("/reportfile/"));
         Assert.assertTrue(norm.contains("/pid_"));
         Assert.assertTrue(report.getName().endsWith(".md"));
+    }
+
+    @Test
+    public void defaultProgressGoesToStderrQuietKeepsReportPaths() throws Exception {
+        File testdata = testdata();
+        Capture def = run(0, "analyze",
+                "--evidence-dir", new File(testdata, "evidence/health-check").getAbsolutePath(),
+                "--thread-dump", new File(testdata, "evidence/health-check/threads/td.txt").getAbsolutePath(),
+                "--type", "auto",
+                "--format", "text",
+                "--out", tmp.newFolder("out-prog").getAbsolutePath());
+        Assert.assertTrue(def.err.contains("[JFA] 准备运行目录") || def.err.contains("[JFA] 生成报告"));
+        Assert.assertTrue(def.err.contains("[JFA]"));
+        Assert.assertFalse(def.out.contains("[JFA]"));
+        Assert.assertTrue(def.out.contains("报告文件:"));
+
+        Capture quiet = run(0, "--quiet", "analyze",
+                "--evidence-dir", new File(testdata, "evidence/health-check").getAbsolutePath(),
+                "--thread-dump", new File(testdata, "evidence/health-check/threads/td.txt").getAbsolutePath(),
+                "--type", "auto",
+                "--format", "text",
+                "--out", tmp.newFolder("out-quiet").getAbsolutePath());
+        Assert.assertFalse(quiet.err.contains("[JFA]"));
+        Assert.assertFalse(quiet.out.contains("[JFA]"));
+        Assert.assertTrue(quiet.out.contains("报告文件:"));
+
+        Capture verbose = run(0, "--verbose", "analyze",
+                "--gc-log", new File(testdata, "gc/old-gen-spiral.log").getAbsolutePath(),
+                "--app-log", new File(testdata, "app/oom-heap-space.log").getAbsolutePath(),
+                "--type", "memory",
+                "--format", "json",
+                "--out", tmp.newFolder("out-verbose").getAbsolutePath());
+        JsonSupport.mapper().readValue(verbose.out, DiagnoseReport.class);
+        Assert.assertFalse(verbose.out.contains("[JFA]"));
+        Assert.assertTrue(verbose.err.contains("[JFA] 开始倒查近") || verbose.err.contains("[JFA] 定位应用日志"));
+        Assert.assertTrue(verbose.err.contains("JSON 报告") || verbose.err.contains("报告文件"));
     }
 
     private File writeConfig(File home) throws Exception {

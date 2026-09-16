@@ -5,6 +5,7 @@ import com.jfa.common.OutputFormat;
 import com.jfa.common.config.JfaConfig;
 
 import java.io.File;
+import java.io.PrintStream;
 
 public class DiagnoseRequest {
     private JfaConfig config;
@@ -23,6 +24,9 @@ public class DiagnoseRequest {
     private String commandLineHint;
     private File hprofPrev;
     private Long compareAfterMs;
+    private boolean quiet;
+    private boolean verbose;
+    private PrintStream progressStream;
 
     public JfaConfig getConfig() {
         return config;
@@ -150,5 +154,40 @@ public class DiagnoseRequest {
 
     public void setCompareAfterMs(Long compareAfterMs) {
         this.compareAfterMs = compareAfterMs;
+    }
+
+    /**
+     * When true, mid-run {@code [JFA]} step lines are omitted. Final report
+     * path footer is still printed by the CLI.
+     */
+    public boolean isQuiet() {
+        return quiet;
+    }
+
+    public void setQuiet(boolean quiet) {
+        this.quiet = quiet;
+    }
+
+    /**
+     * Compatible with the existing {@code --verbose} flag. Main steps print
+     * without it; when set, extra path/size detail may be added.
+     */
+    public boolean isVerbose() {
+        return verbose;
+    }
+
+    public void setVerbose(boolean verbose) {
+        this.verbose = verbose;
+    }
+
+    /**
+     * Test injection. Production leaves this null so steps go to {@code stderr}.
+     */
+    public PrintStream getProgressStream() {
+        return progressStream;
+    }
+
+    public void setProgressStream(PrintStream progressStream) {
+        this.progressStream = progressStream;
     }
 }
