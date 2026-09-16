@@ -158,10 +158,12 @@ public class JfaMain {
             return args;
         }
         invoked = baseName(invoked);
-        if ("jfa".equals(invoked) && isHelpToken(firstArg(args))) {
-            return new String[]{"help", "config"};
+        String first = firstMeaningfulArg(args);
+        // Packaged bin/* always passes --config first; ignore it when deciding the verb.
+        if ("jfa".equals(invoked) && isHelpToken(first)) {
+            return withLeadingConfig(args, "help", "config");
         }
-        if (args.length > 0 && isInternalCommand(args[0])) {
+        if (first != null && isInternalCommand(first)) {
             return args;
         }
         if ("jfa".equals(invoked)) {
@@ -169,19 +171,19 @@ public class JfaMain {
             if ("start".equals(positional) || "stop".equals(positional)) {
                 return args;
             }
-            return prepend(args, "discover");
+            return prependAfterLeadingConfig(args, "discover");
         }
         if ("jfa-analyze".equals(invoked)) {
-            return prepend(args, "diagnose");
+            return prependAfterLeadingConfig(args, "diagnose");
         }
         if ("jfa-file-analyze".equals(invoked)) {
-            return prepend(args, "analyze");
+            return prependAfterLeadingConfig(args, "analyze");
         }
         if ("jfa-collect".equals(invoked)) {
-            return prepend(args, "collect");
+            return prependAfterLeadingConfig(args, "collect");
         }
         if ("jfa-config".equals(invoked)) {
-            return prepend(args, "help", "config");
+            return withLeadingConfig(args, "help", "config");
         }
         return args;
     }
@@ -238,7 +240,50 @@ public class JfaMain {
     }
 
     private static boolean isCosmeticFlag(String key) {
-        return "help".equals(key) || "quiet".equals(key) || "verbose".equals(key) || "version".equals(key);
+        // Packaged launchers always inject --config; treat it as cosmetic for bare-help.
+        return "help".equals(key) || "quiet".equals(key) || "verbose".equals(key)
+                || "version".equals(key) || "config".equals(key);
+    }
+
+    /** First argv token that is not --config / --config=... */
+    static String firstMeaningfulArg(String[] args) {
+        int i = skipLeadingConfig(args);
+        return i < 0 || i >= args.length ? null : args[i];
+    }
+
+    static int skipLeadingConfig(String[] args) {
+        int i = 0;
+        while (i < args.length) {
+            String a = args[i];
+            if ("--config".equals(a)) {
+                i += (i + 1 < args.length) ? 2 : 1;
+                continue;
+            }
+            if (a.startsWith("--config=")) {
+                i++;
+                continue;
+            }
+            break;
+        }
+        return i;
+    }
+
+    static String[] prependAfterLeadingConfig(String[] args, String... prefix) {
+        int i = skipLeadingConfig(args);
+        String[] out = new String[i + prefix.length + (args.length - i)];
+        System.arraycopy(args, 0, out, 0, i);
+        System.arraycopy(prefix, 0, out, i, prefix.length);
+        System.arraycopy(args, i, out, i + prefix.length, args.length - i);
+        return out;
+    }
+
+    /** Keep leading --config, replace the remainder with the given commands. */
+    static String[] withLeadingConfig(String[] args, String... commands) {
+        int i = skipLeadingConfig(args);
+        String[] out = new String[i + commands.length];
+        System.arraycopy(args, 0, out, 0, i);
+        System.arraycopy(commands, 0, out, i, commands.length);
+        return out;
     }
 
     private static void printHelp(String text) {

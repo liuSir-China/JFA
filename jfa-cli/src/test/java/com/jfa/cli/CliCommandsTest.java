@@ -254,6 +254,19 @@ public class CliCommandsTest {
                 JfaMain.mapInvocation("jfa", new String[]{"start", "--help"}));
         Assert.assertArrayEquals(new String[]{"discover", "--user", "app"},
                 JfaMain.mapInvocation("jfa", new String[]{"--user", "app"}));
+        // Packaged bin always injects --config before the verb.
+        Assert.assertArrayEquals(new String[]{"--config", "x", "help", "config"},
+                JfaMain.mapInvocation("jfa", new String[]{"--config", "x", "help"}));
+        Assert.assertArrayEquals(new String[]{"--config", "x", "help", "config"},
+                JfaMain.mapInvocation("jfa", new String[]{"--config", "x", "--help"}));
+        Assert.assertArrayEquals(new String[]{"--config", "x", "discover"},
+                JfaMain.mapInvocation("jfa", new String[]{"--config", "x"}));
+        Assert.assertArrayEquals(new String[]{"--config", "x", "analyze"},
+                JfaMain.mapInvocation("jfa-file-analyze", new String[]{"--config", "x", "analyze"}));
+        Assert.assertArrayEquals(new String[]{"--config", "x", "diagnose"},
+                JfaMain.mapInvocation("jfa-analyze", new String[]{"--config", "x"}));
+        Assert.assertTrue(JfaMain.isBare(CliParser.parse(new String[]{"analyze", "--config", "x"})));
+        Assert.assertTrue(JfaMain.isBare(CliParser.parse(new String[]{"diagnose", "--config", "x"})));
     }
 
     @Test
