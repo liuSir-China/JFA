@@ -8,7 +8,7 @@
 | `jfa-analyze` | 活体诊断（原 `jfa diagnose`）。无参数打印中文参数说明 |
 | `jfa-file-analyze` | 离线分析（原 `jfa analyze`）。无参数打印中文参数说明 |
 | `jfa-collect` | 采集 heapdump/sample/threaddump。无参数打印中文参数说明 |
-| `jfa-config` | 推荐 JVM 配置（原 `jfa help config`） |
+| `jfa-config` | 推荐 JVM 配置（原 `jfa help  /  jfa-config`） |
 
 诊断/分析结束后控制台**不**打印报告正文，只打印：
 
@@ -65,7 +65,7 @@ jfa diagnose --pid <pid> --type memory --compare-after 15m --confirm
 export JAVA_HOME=/path/to/jdk8
 mvn test package
 ./scripts/package-linux.sh
-./dist/jfa-linux/bin/jfa help
+./bin/jfa help
 ```
 
 源码与字节码均为 **1.8**。运行分析端与目标进程均以 JDK 8 为主。
@@ -73,7 +73,7 @@ mvn test package
 ## 推荐 JVM 配置（可选证据增强，不是使用前提）
 
 ```bash
-jfa help config
+jfa help  /  jfa-config
 jfa config recommend
 ```
 

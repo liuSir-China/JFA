@@ -4,82 +4,74 @@
 
 ## 1. 诊断已有进程（第一步）
 
-不必先改启动脚本。CLI 直接诊断；可选 Web 控制台见第 7 节。
+不必先改启动脚本。
 
 ```bash
-jfa
-jfa-analyze --pid <pid>
+./jfa                         # 列出可分析 PID
+./jfa-analyze                 # 空跑：打印完整用法
+./jfa-analyze --pid <pid>     # 默认全量 = 内存 + 线程
 ```
-
-默认全量（内存 + 线程）。当前无 OOM、无死锁时，报告为**健康体检**：否定结论 + 可选风险提示，不会硬编根因。
 
 只看一侧：
 
 ```bash
-jfa-analyze --pid <pid> --type memory
-jfa-analyze --pid <pid> --type thread
-jfa-analyze --pid <pid> --type memory --compare-after 15m --confirm
+./jfa-analyze --pid <pid> --type memory
+./jfa-analyze --pid <pid> --type thread
+./jfa-analyze --pid <pid> --type memory --compare-after 15m --confirm
 ```
 
 ## 2. 按服务名（可选登记，不托管生命周期）
 
 ```bash
-jfa register --name order-svc --pid <pid> --app-log /var/log/order-svc/app.log
-jfa-analyze --service order-svc
+java -jar lib/jfa.jar register --name order-svc --pid <pid> --app-log /var/log/order-svc/app.log
+./jfa-analyze --service order-svc
 ```
 
-`lifecycle_managed_by_jfa` 恒为 false。登记不会启动或停止目标进程。
+登记不会启动或停止目标进程。
 
 ## 3. 只有落盘证据（进程已死）
 
 ```bash
-jfa-file-analyze --evidence-dir /var/jfa/order-svc
-jfa-file-analyze --hprof ./heap/java_pid.hprof --gc-log ./gc/gc.log --type memory
-jfa-file-analyze --hprof ./heap/newer.hprof --hprof-prev ./heap/older.hprof --type memory
-jfa-file-analyze --thread-dump ./threads/td.txt --type thread
+./jfa-file-analyze            # 空跑：打印完整用法
+./jfa-file-analyze --evidence-dir /path/to/evidence
+./jfa-file-analyze --hprof ./heap/java_pid.hprof --gc-log ./gc/gc.log --type memory
+./jfa-file-analyze --hprof ./heap/newer.hprof --hprof-prev ./heap/older.hprof --type memory
+./jfa-file-analyze --thread-dump ./threads/td.txt --type thread
 ```
 
-有 hprof 时报告必须给出可行动修改建议（改什么 / 为什么 / 验证方式）。
-
-## 4. 活体 dump（需确认）
-
-heap dump 有 STW / 磁盘 / 服务影响。交互终端会询问 y/n；脚本请使用 `--confirm`（等同于回答 y）：
+## 4. 活体采集（需确认）
 
 ```bash
-jfa-collect threaddump --pid <pid>
-jfa-collect heapdump --pid <pid> --confirm
-jfa-collect sample --pid <pid> --interval 5s --duration 60s --confirm
+./jfa-collect                 # 空跑：打印完整用法
+./jfa-collect threaddump --pid <pid>
+./jfa-collect heapdump --pid <pid> --confirm
+./jfa-collect sample --pid <pid> --interval 5s --duration 60s --confirm
 ```
 
-无确认时不会生成 hprof。`diagnose` 对活体 pid 会优先复用目标 JVM 已有 hprof/GC（并复制进本轮 `reportfile` 目录），证据不足才采集。诊断内短时 `jstat -gcutil` 采样与日志倒查由产品自动执行。
+无确认时不会生成 hprof。诊断会优先复用目标 JVM 已有 hprof/GC，证据不足才采集。
 
-## 5. 抄作业：推荐 JVM 配置（可选，非前提）
+## 5. 推荐 JVM 配置（可选，非使用前提）
 
 ```bash
-jfa help
-jfa-config
-jfa config recommend
+./jfa help
+./jfa-config
 ```
 
-输出含 JDK 8 滚动 GC 文件日志、`HeapDumpOnOutOfMemoryError`、`HeapDumpPath` 以及 bash 启动脚本示例（按配置项分组表格）。
+输出含 JDK 8 滚动 GC、`HeapDumpOnOutOfMemoryError`、`HeapDumpPath` 及 bash 启动示例（按配置项分组表格）。
 
-## 6. 打包布局
-
-```bash
-./scripts/package-linux.sh
-./dist/jfa-linux/bin/jfa help
-```
-
-## 7. Web 控制台（可选）
+## 6. Web 控制台（可选）
 
 ```bash
 ./jfa start
-# 浏览器打开 http://<ip>:<port>/jfa
+# 浏览器：http://<服务器IP>:<port>/jfa
+# console.bind=0.0.0.0 表示监听所有网卡；127.0.0.1 仅本机
 ./jfa stop
 ```
 
-端口与绑定在 `conf/jfa.properties` 顶部：`console.port=8080`、`console.bind=0.0.0.0`。页面只显示监控卡片（已分析 / 未分析计数 + 四列卡片）。PID 文件：`<install>/run/jfa-console.pid`。
+## 7. 本地从源码打 Linux 包（Windows）
 
-## 控制台输出
+```bat
+build-linux-package.bat
+```
 
-`jfa-analyze` / `jfa-file-analyze` 默认向 stderr 打印 `[JFA]` 进度；结束后只打印报告绝对路径（不打印报告正文）。`--format json` 时 JSON 在 stdout，路径在 stderr。
+产物：`dist\jfa-1.0.0-linux-x86_64.tar.gz`，并复制到上一级目录。
