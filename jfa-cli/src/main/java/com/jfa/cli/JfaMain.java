@@ -422,7 +422,7 @@ public class JfaMain {
     }
 
     private int cmdStart(final JfaConfig config) {
-        if (ConsolePidFile.isRunning(config)) {
+        if (ConsolePidFile.isForeignInstanceRunning(config)) {
             Long pid = ConsolePidFile.readPid(config);
             ConsoleLayout.printLine(System.out, "JFA web console already running (pid "
                     + (pid == null ? "?" : String.valueOf(pid)) + ")");

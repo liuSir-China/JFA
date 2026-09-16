@@ -25,6 +25,7 @@ public class ConsolePidFileTest {
         ConsolePidFile.write(cfg, self);
         Assert.assertEquals(Long.valueOf(self), ConsolePidFile.readPid(cfg));
         Assert.assertTrue(ConsolePidFile.isRunning(cfg));
+        Assert.assertFalse(ConsolePidFile.isForeignInstanceRunning(cfg));
         ConsolePidFile.delete(cfg);
         Assert.assertFalse(ConsolePidFile.file(cfg).isFile());
     }

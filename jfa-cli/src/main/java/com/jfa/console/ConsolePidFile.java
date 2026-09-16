@@ -73,6 +73,16 @@ public final class ConsolePidFile {
         return pid != null && isProcessAlive(pid.longValue());
     }
 
+    /**
+     * True when a <em>different</em> process holds the console PID file.
+     * Used by {@code jfa start} so the wrapper-written self pid is not treated
+     * as an already-running instance.
+     */
+    public static boolean isForeignInstanceRunning(JfaConfig config) {
+        Long pid = readPid(config);
+        return pid != null && pid.longValue() != currentPid() && isProcessAlive(pid.longValue());
+    }
+
     public static boolean isProcessAlive(long pid) {
         if (pid <= 0) {
             return false;
