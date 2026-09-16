@@ -88,7 +88,45 @@ public final class ConsolePidFile {
             return false;
         }
         File proc = new File("/proc/" + pid);
-        return proc.exists();
+        if (proc.exists()) {
+            return true;
+        }
+        return windowsOs() && windowsProcessAlive(pid);
+    }
+
+    private static boolean windowsOs() {
+        String os = System.getProperty("os.name", "");
+        return os.toLowerCase(java.util.Locale.ROOT).contains("win");
+    }
+
+    private static boolean windowsProcessAlive(long pid) {
+        Process p = null;
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    "cmd.exe", "/c", "tasklist /FI \"PID eq " + pid + "\" /NH");
+            pb.redirectErrorStream(true);
+            p = pb.start();
+            java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+            byte[] chunk = new byte[512];
+            int n;
+            java.io.InputStream in = p.getInputStream();
+            while ((n = in.read(chunk)) >= 0) {
+                buf.write(chunk, 0, n);
+            }
+            p.waitFor();
+            String out = new String(buf.toByteArray(), StandardCharsets.UTF_8);
+            return out.contains(String.valueOf(pid));
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (p != null) {
+                try {
+                    p.destroy();
+                } catch (Exception ignored) {
+                    // ignore
+                }
+            }
+        }
     }
 
     public static void delete(JfaConfig config) {
@@ -144,12 +182,19 @@ public final class ConsolePidFile {
 
     private static void kill(long pid, boolean force) {
         try {
-            ProcessBuilder pb = force
-                    ? new ProcessBuilder("kill", "-9", String.valueOf(pid))
-                    : new ProcessBuilder("kill", String.valueOf(pid));
-            File devNull = new File("/dev/null");
-            pb.redirectError(ProcessBuilder.Redirect.to(devNull));
-            pb.redirectOutput(ProcessBuilder.Redirect.to(devNull));
+            ProcessBuilder pb;
+            if (windowsOs()) {
+                pb = force
+                        ? new ProcessBuilder("taskkill", "/F", "/PID", String.valueOf(pid))
+                        : new ProcessBuilder("taskkill", "/PID", String.valueOf(pid));
+            } else {
+                pb = force
+                        ? new ProcessBuilder("kill", "-9", String.valueOf(pid))
+                        : new ProcessBuilder("kill", String.valueOf(pid));
+                File devNull = new File("/dev/null");
+                pb.redirectError(ProcessBuilder.Redirect.to(devNull));
+                pb.redirectOutput(ProcessBuilder.Redirect.to(devNull));
+            }
             Process p = pb.start();
             p.waitFor();
         } catch (Exception ignored) {

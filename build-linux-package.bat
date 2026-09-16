@@ -50,9 +50,22 @@ if not exist "%JAR%" (
 echo [2/4] Assemble dist\%PKG_NAME% ...
 set "DEST=%PROJECT%\dist\%PKG_NAME%"
 if exist "%PROJECT%\dist" rmdir /s /q "%PROJECT%\dist"
-mkdir "%DEST%\bin" "%DEST%\lib" "%DEST%\conf" "%DEST%\docs" "%DEST%\testdata" "%DEST%\reportfile" "%DEST%\run"
+mkdir "%PROJECT%\dist" 2>nul
+mkdir "%DEST%" 2>nul
+mkdir "%DEST%\bin" 2>nul
+mkdir "%DEST%\lib" 2>nul
+mkdir "%DEST%\conf" 2>nul
+mkdir "%DEST%\docs" 2>nul
+mkdir "%DEST%\testdata" 2>nul
+mkdir "%DEST%\reportfile" 2>nul
+mkdir "%DEST%\run" 2>nul
+if not exist "%DEST%\bin" (
+  echo [ERROR] cannot create %DEST%
+  goto :FAIL
+)
 
 copy /y "%JAR%" "%DEST%\lib\jfa.jar" >nul
+if errorlevel 1 (echo [ERROR] copy jar failed & goto :FAIL)
 if exist "%PROJECT%\conf\jfa.properties" copy /y "%PROJECT%\conf\jfa.properties" "%DEST%\conf\" >nul
 if exist "%PROJECT%\README.md" copy /y "%PROJECT%\README.md" "%DEST\" >nul
 if exist "%PROJECT%\docs\quickstart.md" copy /y "%PROJECT%\docs\quickstart.md" "%DEST%\docs\" >nul
@@ -64,12 +77,19 @@ if not exist "%PROJECT%\scripts\jfa-launcher.sh" (
   goto :FAIL
 )
 REM Write bin wrappers with Unix LF endings (avoid bash\r on Linux).
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$names=@('jfa-launcher.sh','jfa','jfa-analyze','jfa-file-analyze','jfa-collect','jfa-config'); foreach($n in $names){ $src='%PROJECT%\scripts\'+$n; if(-not (Test-Path -LiteralPath $src)){ throw ('missing '+$src) }; $dst='%DEST%\bin\'+$n; $t=[IO.File]::ReadAllText($src) -replace [char]13+[char]10,[char]10 -replace [char]13,[char]10; if(-not $t.EndsWith([string][char]10)){ $t+=[char]10 }; [IO.File]::WriteAllBytes($dst,[Text.UTF8Encoding]::new($false).GetBytes($t)) }"
+set "JFA_SCRIPTS=%PROJECT%\scripts"
+set "JFA_BIN=%DEST%\bin"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$names=@('jfa-launcher.sh','jfa','jfa-analyze','jfa-file-analyze','jfa-collect','jfa-config'); $srcRoot=$env:JFA_SCRIPTS; $dstRoot=$env:JFA_BIN; foreach($n in $names){ $src=Join-Path $srcRoot $n; if(-not (Test-Path -LiteralPath $src)){ throw ('missing '+$src) }; $dst=Join-Path $dstRoot $n; $t=[IO.File]::ReadAllText($src) -replace [char]13+[char]10,[char]10 -replace [char]13,[char]10; if(-not $t.EndsWith([string][char]10)){ $t+=[char]10 }; [IO.File]::WriteAllBytes($dst,[Text.UTF8Encoding]::new($false).GetBytes($t)) }"
 if errorlevel 1 (echo [ERROR] write bin wrappers failed & goto :FAIL)
 
 echo [3/4] Create %TAR_NAME% ...
 pushd "%PROJECT%\dist"
-tar -czf "%TAR_NAME%" "%PKG_NAME%"if errorlevel 1 (popd & echo [ERROR] tar failed & goto :FAIL)
+tar -czf "%TAR_NAME%" "%PKG_NAME%"
+if errorlevel 1 (
+  popd
+  echo [ERROR] tar failed
+  goto :FAIL
+)
 popd
 
 echo [4/4] Copy to parent folder and remove old source tarball ...
@@ -95,6 +115,7 @@ echo   ./%PKG_NAME%/bin/jfa-config
 echo.
 pause
 exit /b 0
+
 :FAIL
 echo.
 echo FAILED.

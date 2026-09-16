@@ -2,6 +2,8 @@ package com.jfa.console;
 
 import com.jfa.common.config.JfaConfig;
 import org.junit.Assert;
+import org.junit.Assume;
+import java.util.Locale;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -32,6 +34,7 @@ public class ConsolePidFileTest {
 
     @Test
     public void terminateSleepProcess() throws Exception {
+        Assume.assumeFalse("requires sh/sleep; Linux CI only", isWindows());
         Process proc = new ProcessBuilder("sh", "-c", "echo $$; exec sleep 30").start();
         BufferedReader br = new BufferedReader(new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8));
         String line = br.readLine();
@@ -40,6 +43,11 @@ public class ConsolePidFileTest {
         Assert.assertTrue(ConsolePidFile.isProcessAlive(pid));
         Assert.assertTrue(ConsolePidFile.terminate(pid));
         Assert.assertFalse(ConsolePidFile.isProcessAlive(pid));
+    }
+
+    private static boolean isWindows() {
+        String os = System.getProperty("os.name", "");
+        return os.toLowerCase(Locale.ROOT).contains("win");
     }
 
     private JfaConfig config() throws Exception {

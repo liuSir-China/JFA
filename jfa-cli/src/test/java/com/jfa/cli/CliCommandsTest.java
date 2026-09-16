@@ -3,6 +3,8 @@ package com.jfa.cli;
 import com.jfa.common.json.JsonSupport;
 import com.jfa.common.model.report.DiagnoseReport;
 import org.junit.Assert;
+import org.junit.Assume;
+import java.util.Locale;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -264,6 +266,7 @@ public class CliCommandsTest {
 
     @Test
     public void stopTerminatesPidFileProcess() throws Exception {
+        Assume.assumeFalse("console stop uses /proc + kill; Linux package only", isWindows());
         File home = tmp.newFolder("jfa-home-kill");
         File cfgFile = writeConfig(home);
         Process proc = new ProcessBuilder("sh", "-c", "echo $$; exec sleep 30").start();
@@ -283,6 +286,12 @@ public class CliCommandsTest {
         Assert.assertTrue("missing report path footer: " + out, i >= 0);
         String pathLine = out.substring(i + marker.length()).trim().split("\\r?\\n")[0].trim();
         return new File(pathLine);
+    }
+
+
+    private static boolean isWindows() {
+        String os = System.getProperty("os.name", "");
+        return os.toLowerCase(Locale.ROOT).contains("win");
     }
 
     private File writeConfig(File home) throws Exception {
