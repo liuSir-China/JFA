@@ -244,6 +244,10 @@ public class CliCommandsTest {
         Assert.assertArrayEquals(new String[]{"help", "config"}, JfaMain.mapInvocation("jfa-config", new String[0]));
         Assert.assertArrayEquals(new String[]{"start"}, JfaMain.mapInvocation("jfa", new String[]{"start"}));
         Assert.assertArrayEquals(new String[]{"stop"}, JfaMain.mapInvocation("jfa", new String[]{"stop"}));
+        Assert.assertArrayEquals(new String[]{"--config", "x", "start"},
+                JfaMain.mapInvocation("jfa", new String[]{"--config", "x", "start"}));
+        Assert.assertArrayEquals(new String[]{"--config", "x", "stop"},
+                JfaMain.mapInvocation("jfa", new String[]{"--config", "x", "stop"}));
         Assert.assertArrayEquals(new String[]{"start", "--help"},
                 JfaMain.mapInvocation("jfa", new String[]{"start", "--help"}));
         Assert.assertArrayEquals(new String[]{"discover", "--user", "app"},

@@ -165,6 +165,10 @@ public class JfaMain {
             return args;
         }
         if ("jfa".equals(invoked)) {
+            String positional = CliParser.parse(args).command();
+            if ("start".equals(positional) || "stop".equals(positional)) {
+                return args;
+            }
             return prepend(args, "discover");
         }
         if ("jfa-analyze".equals(invoked)) {

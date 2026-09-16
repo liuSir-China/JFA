@@ -47,7 +47,7 @@ start_console_bg() {
     fi
     rm -f "$pidfile"
   fi
-  nohup "$JAVA_BIN" -Dfile.encoding=UTF-8 -jar "$ROOT/lib/jfa.jar" --config "$ROOT/conf/jfa.properties" start "$@" >>"$logfile" 2>&1 &
+  nohup env -u JFA_CMD "$JAVA_BIN" -Dfile.encoding=UTF-8 -jar "$ROOT/lib/jfa.jar" --config "$ROOT/conf/jfa.properties" start "$@" >>"$logfile" 2>&1 &
   local pid=$!
   echo "$pid" > "$pidfile"
   sleep 0.4
