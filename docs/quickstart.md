@@ -4,7 +4,7 @@
 
 ## 1. 诊断已有进程（第一步）
 
-不要执行 start，不要先改启动脚本。
+不必先改启动脚本。CLI 直接诊断；可选 Web 控制台见第 7 节。
 
 ```bash
 jfa
@@ -70,6 +70,15 @@ jfa config recommend
 ./dist/jfa-linux/bin/jfa help
 ```
 
+## 7. Web 控制台（可选）
+
+```bash
+./jfa start
+# 浏览器打开 http://<ip>:<port>/jfa
+./jfa stop
+```
+
+端口与绑定在 `conf/jfa.properties` 顶部：`console.port=8080`、`console.bind=0.0.0.0`。页面只显示监控卡片（已分析 / 未分析计数 + 四列卡片）。PID 文件：`<install>/run/jfa-console.pid`。
 
 ## 控制台输出
 

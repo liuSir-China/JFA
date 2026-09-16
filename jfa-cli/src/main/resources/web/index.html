@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JFA</title>
+  <link rel="stylesheet" href="/jfa/app.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">JFA</div>
+    <div id="counts" class="counts">已分析 0 · 未分析 0</div>
+  </header>
+  <main id="grid" class="grid"></main>
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" id="modal-backdrop"></div>
+    <div class="modal-card">
+      <button type="button" class="modal-close" id="modal-close" aria-label="close">×</button>
+      <pre id="modal-body"></pre>
+    </div>
+  </div>
+  <script src="/jfa/app.js"></script>
+</body>
+</html>

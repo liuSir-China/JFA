@@ -27,9 +27,17 @@ public class CliCommandsTest {
         Assert.assertTrue(c.out.contains("[JFA]"));
         Assert.assertTrue(c.out.contains("jfa-config") || c.out.contains("help config"));
         Assert.assertTrue(c.out.startsWith("\n\n") || c.out.startsWith("\r\n\r\n"));
-        Assert.assertFalse(c.out.contains("第一步") && c.out.contains("jfa start"));
-        Assert.assertTrue(c.out.contains("无需 jfa start") || c.out.contains("不要先 start")
-                || c.out.contains("无需 jfa start"));
+        Assert.assertTrue(c.out.contains("jfa start"));
+        Assert.assertTrue(c.out.contains("jfa stop"));
+        Assert.assertTrue(c.out.contains("/jfa"));
+        Assert.assertTrue(c.out.contains("不必先改") || c.out.contains("不依赖 Web")
+                || c.out.contains("CLI 不依赖"));
+        Assert.assertFalse(c.out.contains("第一步") && c.out.contains("不要执行 start"));
+
+        Capture startHelp = run(0, "start", "--help");
+        Assert.assertTrue(startHelp.out.contains("console.port") || startHelp.out.contains("Web"));
+        Capture stopHelp = run(0, "stop", "--help");
+        Assert.assertTrue(stopHelp.out.contains("jfa-console.pid") || stopHelp.out.contains("stop"));
 
         Capture cfg = run(0, "help", "config");
         Capture rec = run(0, "config", "recommend");
@@ -234,6 +242,35 @@ public class CliCommandsTest {
         Assert.assertArrayEquals(new String[]{"analyze"}, JfaMain.mapInvocation("jfa-file-analyze", new String[0]));
         Assert.assertArrayEquals(new String[]{"collect"}, JfaMain.mapInvocation("jfa-collect", new String[0]));
         Assert.assertArrayEquals(new String[]{"help", "config"}, JfaMain.mapInvocation("jfa-config", new String[0]));
+        Assert.assertArrayEquals(new String[]{"start"}, JfaMain.mapInvocation("jfa", new String[]{"start"}));
+        Assert.assertArrayEquals(new String[]{"stop"}, JfaMain.mapInvocation("jfa", new String[]{"stop"}));
+        Assert.assertArrayEquals(new String[]{"start", "--help"},
+                JfaMain.mapInvocation("jfa", new String[]{"start", "--help"}));
+        Assert.assertArrayEquals(new String[]{"discover", "--user", "app"},
+                JfaMain.mapInvocation("jfa", new String[]{"--user", "app"}));
+    }
+
+    @Test
+    public void stopWhenNotRunningIsOk() throws Exception {
+        File home = tmp.newFolder("jfa-home-stop");
+        File cfg = writeConfig(home);
+        Capture c = run(0, "--config", cfg.getAbsolutePath(), "stop");
+        Assert.assertTrue(c.out.contains("not running"));
+    }
+
+    @Test
+    public void stopTerminatesPidFileProcess() throws Exception {
+        File home = tmp.newFolder("jfa-home-kill");
+        File cfgFile = writeConfig(home);
+        Process proc = new ProcessBuilder("sh", "-c", "echo $$; exec sleep 30").start();
+        java.io.BufferedReader br = new java.io.BufferedReader(
+                new java.io.InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8));
+        long pid = Long.parseLong(br.readLine().trim());
+        com.jfa.common.config.JfaConfig cfg = com.jfa.common.config.JfaConfig.load(cfgFile);
+        com.jfa.console.ConsolePidFile.write(cfg, pid);
+        Capture c = run(0, "--config", cfgFile.getAbsolutePath(), "stop");
+        Assert.assertTrue(c.out.contains("stopped"));
+        Assert.assertFalse(com.jfa.console.ConsolePidFile.isProcessAlive(pid));
     }
 
     private static File reportFileFromFooter(String out) {

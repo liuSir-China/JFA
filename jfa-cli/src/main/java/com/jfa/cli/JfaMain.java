@@ -7,6 +7,8 @@ import com.jfa.common.JfaException;
 import com.jfa.common.OutputFormat;
 import com.jfa.common.config.JfaConfig;
 import com.jfa.common.io.ConsoleLayout;
+import com.jfa.console.ConsolePidFile;
+import com.jfa.console.ConsoleServer;
 import com.jfa.common.json.JsonSupport;
 import com.jfa.common.model.JavaProcessInfo;
 import com.jfa.common.model.ServiceMeta;
@@ -124,6 +126,20 @@ public class JfaMain {
             if ("status".equals(cmd) || "show".equals(cmd)) {
                 return cmdStatus(p, config);
             }
+            if ("start".equals(cmd)) {
+                if (p.flag("help")) {
+                    printHelp(HelpText.consoleHelp());
+                    return 0;
+                }
+                return cmdStart(config);
+            }
+            if ("stop".equals(cmd)) {
+                if (p.flag("help")) {
+                    printHelp(HelpText.consoleHelp());
+                    return 0;
+                }
+                return cmdStop(config);
+            }
             throw new JfaException(ErrorCode.E_USAGE, "未知命令: " + cmd + "\n" + HelpText.mainHelp());
         } catch (JfaException e) {
             return fail(e.getErrorCode(), e.getMessage(), jsonErr);
@@ -178,7 +194,8 @@ public class JfaMain {
         return "discover".equals(token) || "diagnose".equals(token) || "analyze".equals(token)
                 || "collect".equals(token) || "help".equals(token) || "config".equals(token)
                 || "register".equals(token) || "evidence".equals(token)
-                || "status".equals(token) || "show".equals(token);
+                || "status".equals(token) || "show".equals(token)
+                || "start".equals(token) || "stop".equals(token);
     }
 
     private static boolean isHelpToken(String token) {
@@ -398,6 +415,62 @@ public class JfaMain {
             return 0;
         }
         throw new JfaException(ErrorCode.E_USAGE, "evidence 子命令: suggest | gc | enhance-snippet");
+    }
+
+    private int cmdStart(final JfaConfig config) {
+        if (ConsolePidFile.isRunning(config)) {
+            Long pid = ConsolePidFile.readPid(config);
+            ConsoleLayout.printLine(System.out, "JFA web console already running (pid "
+                    + (pid == null ? "?" : String.valueOf(pid)) + ")");
+            ConsoleLayout.printLine(System.out, "Browse http://" + ConsoleServer.guessReachableHost()
+                    + ":" + config.getConsolePort() + "/jfa");
+            return 0;
+        }
+        final ConsoleServer server;
+        try {
+            server = ConsoleServer.start(config);
+        } catch (Exception e) {
+            throw new JfaException(ErrorCode.E_INTERNAL,
+                    "无法启动 Web 控制台: " + (e.getMessage() == null ? e.getClass().getName() : e.getMessage()), e);
+        }
+        ConsolePidFile.writeCurrent(config);
+        ConsoleLayout.printLine(System.out, "JFA web console listening on " + server.browseUrl());
+        ConsoleLayout.printLine(System.out, "PID file: " + ConsolePidFile.file(config).getAbsolutePath());
+        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    server.stop();
+                } catch (Exception ignored) {
+                    // ignore
+                }
+                ConsolePidFile.deleteIfCurrent(config);
+            }
+        }, "jfa-console-shutdown"));
+        try {
+            server.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            server.stop();
+            ConsolePidFile.deleteIfCurrent(config);
+        }
+        return 0;
+    }
+
+    private int cmdStop(JfaConfig config) {
+        Long pid = ConsolePidFile.readPid(config);
+        if (pid == null || !ConsolePidFile.isProcessAlive(pid.longValue())) {
+            ConsolePidFile.delete(config);
+            ConsoleLayout.printLine(System.out, "JFA web console is not running");
+            return 0;
+        }
+        boolean gone = ConsolePidFile.terminate(pid.longValue());
+        ConsolePidFile.delete(config);
+        if (!gone && ConsolePidFile.isProcessAlive(pid.longValue())) {
+            throw new JfaException(ErrorCode.E_INTERNAL, "无法停止 Web 控制台 pid " + pid);
+        }
+        ConsoleLayout.printLine(System.out, "JFA web console stopped");
+        return 0;
     }
 
     private int cmdStatus(CliParser p, JfaConfig config) {
