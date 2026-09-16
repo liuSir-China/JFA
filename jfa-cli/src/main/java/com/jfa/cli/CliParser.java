@@ -52,6 +52,7 @@ public class CliParser {
 
     private static boolean isFlag(String key) {
         return "confirm".equals(key) || "force".equals(key) || "verbose".equals(key)
+                || "quiet".equals(key)
                 || "dry-run".equals(key) || "help".equals(key) || "version".equals(key);
     }
 
