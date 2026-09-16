@@ -65,19 +65,19 @@ public final class ConsoleProgress {
         if (ms <= 0L) {
             return "0s";
         }
-        if (ms % 60_000L == 0L) {
-            return (ms / 60_000L) + "m";
+        if (ms >= 60_000L) {
+            long minutes = ms / 60_000L;
+            long rem = ms % 60_000L;
+            if (rem == 0L) {
+                return minutes + "m";
+            }
+            if (rem % 1000L == 0L) {
+                return minutes + "m" + (rem / 1000L) + "s";
+            }
+            return minutes + "m" + rem + "ms";
         }
         if (ms % 1000L == 0L) {
             return (ms / 1000L) + "s";
-        }
-        if (ms >= 60_000L) {
-            long minutes = ms / 60_000L;
-            long seconds = (ms % 60_000L) / 1000L;
-            if (seconds == 0L) {
-                return minutes + "m";
-            }
-            return minutes + "m" + seconds + "s";
         }
         return ms + "ms";
     }

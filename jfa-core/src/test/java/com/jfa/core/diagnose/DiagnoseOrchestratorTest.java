@@ -121,6 +121,7 @@ public class DiagnoseOrchestratorTest {
         req.setMode(AnalysisMode.AUTO);
         req.setLiveCollect(false);
         req.setFormat(OutputFormat.BOTH);
+        req.setProgressStream(utf8Stream(new ByteArrayOutputStream()));
         DiagnoseResult r = new DiagnoseOrchestrator().run(req);
         Assert.assertNotNull(r.getTextFile());
         String path = r.getTextFile().getAbsolutePath().replace('\\', '/');
@@ -225,7 +226,7 @@ public class DiagnoseOrchestratorTest {
         DiagnoseRequest req = base(TestDataPaths.file("evidence/health-check"));
         req.setThreadDump(TestDataPaths.file("evidence/health-check/threads/td.txt"));
         req.setMode(AnalysisMode.AUTO);
-        req.setProgressStream(new PrintStream(buf, true, "UTF-8"));
+        req.setProgressStream(utf8Stream(buf));
         new DiagnoseOrchestrator().run(req);
         String steps = buf.toString("UTF-8").replace("\r\n", "\n");
         Assert.assertTrue(steps.contains("[JFA] 解析证据目录"));
@@ -244,7 +245,7 @@ public class DiagnoseOrchestratorTest {
         req.setThreadDump(TestDataPaths.file("evidence/health-check/threads/td.txt"));
         req.setMode(AnalysisMode.AUTO);
         req.setQuiet(true);
-        req.setProgressStream(new PrintStream(buf, true, "UTF-8"));
+        req.setProgressStream(utf8Stream(buf));
         DiagnoseResult r = new DiagnoseOrchestrator().run(req);
         Assert.assertEquals("", buf.toString("UTF-8"));
         Assert.assertNotNull(r.getTextFile());
@@ -272,7 +273,7 @@ public class DiagnoseOrchestratorTest {
         req.setHprof(newer);
         req.setHprofPrev(older);
         req.setAppLog(log);
-        req.setProgressStream(new PrintStream(buf, true, "UTF-8"));
+        req.setProgressStream(utf8Stream(buf));
         new DiagnoseOrchestrator().run(req);
         String steps = buf.toString("UTF-8");
         Assert.assertTrue(steps.contains("[JFA] 复用已有 hprof"));
@@ -306,8 +307,16 @@ public class DiagnoseOrchestratorTest {
         req.setConfirm(true);
         req.setFormat(OutputFormat.BOTH);
         req.setOutDir(new File(tmp.getRoot(), "reports"));
-        req.setProgressStream(new PrintStream(new ByteArrayOutputStream(), true, "UTF-8"));
+        req.setProgressStream(utf8Stream(new ByteArrayOutputStream()));
         return req;
+    }
+
+    private static PrintStream utf8Stream(ByteArrayOutputStream buf) {
+        try {
+            return new PrintStream(buf, true, "UTF-8");
+        } catch (java.io.UnsupportedEncodingException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private static String joinNext(ReportSection sec) {
