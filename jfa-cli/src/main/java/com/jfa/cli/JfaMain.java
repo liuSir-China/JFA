@@ -186,6 +186,8 @@ public class JfaMain {
             req.setOutDir(new File(p.opt("out")));
         }
         req.setFormat(p.opt("format") == null ? OutputFormat.BOTH : OutputFormat.fromCli(p.opt("format")));
+        req.setQuiet(p.flag("quiet"));
+        req.setVerbose(p.flag("verbose"));
         req.setLiveCollect(!analyze);
         if (analyze && req.getPid() == null) {
             req.setLiveCollect(false);

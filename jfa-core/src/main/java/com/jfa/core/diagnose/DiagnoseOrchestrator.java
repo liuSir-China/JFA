@@ -49,8 +49,10 @@ public class DiagnoseOrchestrator {
     private final AppLogLookback logLookback = new AppLogLookback();
     private final HprofParser hprofParser = new HprofParser();
     private final HprofComparer hprofComparer = new HprofComparer();
+    private ConsoleProgress progress = ConsoleProgress.DISABLED;
 
     public DiagnoseResult run(DiagnoseRequest req) {
+        progress = ConsoleProgress.from(req);
         JfaConfig cfg = req.getConfig();
         ServiceRegistry registry = new ServiceRegistry(cfg);
         ResolvedTarget target = resolve(req, registry);
@@ -96,6 +98,7 @@ public class DiagnoseOrchestrator {
             if (cmd == null && target.process != null) {
                 cmd = target.process.getCommandLine();
             }
+            progress.step("分析内存证据 …");
             memory = oomEngine.analyze(pack, dumpRefused, cmd);
             addMemorySection(report, memory, pack);
         }
@@ -135,11 +138,13 @@ public class DiagnoseOrchestrator {
                 report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
                         "复用目标 JVM HeapDumpPath 已有 hprof（不采集新 dump）",
                         pack.getHprof().getAbsolutePath()));
+                progress.detail("定位到目标 JVM 已有 hprof " + pack.getHprof().getAbsolutePath());
             }
             if (pack.getGcLog() != null && pack.getGcLog() != gBefore) {
                 report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
                         "复用目标 JVM GC 日志（-Xloggc / 相关标志）",
                         pack.getGcLog().getAbsolutePath()));
+                progress.detail("定位到目标 JVM GC 日志 " + pack.getGcLog().getAbsolutePath());
             }
         }
 
@@ -181,6 +186,8 @@ public class DiagnoseOrchestrator {
             if (copied != null && copied != pack.getHprof()) {
                 report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
                         "已将复用 hprof 纳入本轮运行目录", copied.getAbsolutePath()));
+                progress.detail("已纳入运行目录 " + copied.getAbsolutePath()
+                        + fileSizeSuffix(copied));
             }
             pack.setHprof(copied);
         }
@@ -228,15 +235,19 @@ public class DiagnoseOrchestrator {
     private void collectThreadIfNeeded(DiagnoseRequest req, ResolvedTarget target, EvidencePack pack,
                                        DiagnoseReport report) {
         if (JvmEvidenceLocator.looksUsableThreadDump(pack.getThreadDump())) {
+            progress.step("复用已有 thread dump → " + pack.getThreadDump().getAbsolutePath());
             return;
         }
         pack.setThreadDump(null);
         if (!req.isLiveCollect() || target.process == null || !discovery.pidExists(target.process.getPid())) {
+            progress.step("未找到可用 thread dump");
             return;
         }
+        progress.step("开始采集 thread dump …");
         JdkCollectors col = new JdkCollectors(req.getConfig());
         File td = col.collectThreadDump(target.process, target.runDir);
         pack.setThreadDump(td);
+        progress.step("thread dump 完成：" + td.getAbsolutePath());
         report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(), "采集 thread dump", td.getAbsolutePath()));
     }
 
@@ -252,6 +263,9 @@ public class DiagnoseOrchestrator {
         boolean haveDump1 = JvmEvidenceLocator.looksUsableHprof(pack.getHprof());
         boolean wantDump2 = live && req.getCompareAfterMs() != null;
         boolean needDump1 = live && !haveDump1;
+        if (needDump1) {
+            progress.step("开始采集 heap dump（需确认）…");
+        }
         if (needDump1 || wantDump2) {
             ConfirmGate.assertDumpAllowed(req.isConfirm());
         }
@@ -269,16 +283,18 @@ public class DiagnoseOrchestrator {
                 }
             }
             pack.setHprof(hprof);
+            progress.step("heap dump 完成：" + hprof.getAbsolutePath() + fileSizeSuffix(hprof));
             report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
                     "经确认采集 heap dump" + (wantDump2 ? "（dump1）" : ""),
                     hprof.getAbsolutePath()));
         } else if (!haveDump1) {
             pack.setHprof(null);
-        } else if (wantDump2 && pack.getHprof() != null) {
-            File src = pack.getHprof();
-            if (!src.getName().startsWith("heap-1-")) {
-                File renamed = ingest(src, target.runDir, "heap",
-                        "heap-1-" + stampName(src, ".hprof"));
+        } else if (pack.getHprof() != null) {
+            progress.step("复用已有 hprof → " + pack.getHprof().getAbsolutePath()
+                    + fileSizeSuffix(pack.getHprof()));
+            if (wantDump2 && !pack.getHprof().getName().startsWith("heap-1-")) {
+                File renamed = ingest(pack.getHprof(), target.runDir, "heap",
+                        "heap-1-" + stampName(pack.getHprof(), ".hprof"));
                 pack.setHprof(renamed);
             }
         }
@@ -293,15 +309,18 @@ public class DiagnoseOrchestrator {
         }
         long wait = Math.max(0L, req.getCompareAfterMs().longValue());
         if (wait > 0L) {
+            progress.step("等待二次 dump（compare-after " + ConsoleProgress.formatDuration(wait) + "）…");
             report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
                     "等待 --compare-after " + wait + "ms 后采集 dump2", "compare"));
             sleepQuietly(wait);
         }
         if (!discovery.pidExists(target.process.getPid())) {
+            progress.step("等待结束后进程已退出，未能采集 dump2");
             report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
                     "等待结束后进程已退出，未能采集 dump2；保留 dump1 并按单快照分析", "compare"));
             return;
         }
+        progress.step("开始采集 heap dump（dump2）…");
         JdkCollectors col = new JdkCollectors(req.getConfig());
         File dump1 = pack.getHprof();
         File dump2 = col.collectHeapDumpConfirmed(target.process, target.runDir);
@@ -311,6 +330,7 @@ public class DiagnoseOrchestrator {
         }
         pack.setHprofPrev(dump1);
         pack.setHprof(dump2);
+        progress.step("heap dump 完成：" + dump2.getAbsolutePath() + fileSizeSuffix(dump2));
         report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
                 "经确认采集 heap dump（dump2）", dump2.getAbsolutePath()));
     }
@@ -329,11 +349,15 @@ public class DiagnoseOrchestrator {
                 && discovery.pidExists(target.process.getPid());
         if (!live) {
             if (pack.getJstatSample() != null && pack.getJstatSample().isFile()) {
+                progress.step("复用已有 jstat 采样 → " + pack.getJstatSample().getAbsolutePath());
                 JstatGcutilAnalyzer.SampleTrend t = gcutilAnalyzer.analyze(
                         FileSupport.readUtf8(pack.getJstatSample()));
                 if (t.available) {
+                    progress.step("采样完成：" + t.summary);
                     report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
                             "复用已有 jstat 采样", pack.getJstatSample().getAbsolutePath()));
+                } else {
+                    progress.step("采样完成：无法解析");
                 }
                 return t.available ? t : null;
             }
@@ -342,8 +366,10 @@ public class DiagnoseOrchestrator {
         JdkCollectors col = new JdkCollectors(req.getConfig());
         int interval = req.getConfig().getSampleIntervalSeconds();
         int count = req.getConfig().getSampleCount();
+        progress.step("开始 jstat 采样（" + interval + "s × " + count + "）…");
         File raw = col.collectGcutilSample(target.process, target.runDir, interval, count);
         if (raw == null) {
+            progress.step("未找到 jstat，跳过堆代采样");
             report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
                     "未找到 jstat，跳过堆代采样", "samples"));
             return null;
@@ -351,6 +377,7 @@ public class DiagnoseOrchestrator {
         pack.setJstatSample(raw);
         String text = FileSupport.readUtf8(raw);
         JstatGcutilAnalyzer.SampleTrend t = gcutilAnalyzer.analyze(text);
+        progress.step("采样完成：" + (t.available ? t.summary : "无法解析"));
         report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
                 t.available ? "完成 jstat -gcutil 采样（" + interval + "s × " + count + "）"
                         : "jstat 采样已写入但无法解析",
@@ -373,6 +400,7 @@ public class DiagnoseOrchestrator {
         }
         AppLogLookback.Result r;
         if (log == null || !log.isFile()) {
+            progress.step("定位应用日志：未解析到路径");
             r = new AppLogLookback.Result();
             r.lookbackMinutes = minutes;
             r.unresolvedNote = "未解析到应用日志路径。请使用 --app-log <file> 后复跑本产品。";
@@ -381,6 +409,8 @@ public class DiagnoseOrchestrator {
                     "应用日志路径未解析", "log_lookback"));
             return r;
         }
+        progress.step("定位应用日志 " + log.getAbsolutePath());
+        progress.step("开始倒查近 " + minutes + " 分钟日志：" + log.getAbsolutePath());
         String text = FileSupport.readUtf8(log);
         r = logLookback.scan(text, System.currentTimeMillis(), minutes);
         r.scannedFiles.add(log.getAbsolutePath());
@@ -397,6 +427,7 @@ public class DiagnoseOrchestrator {
             }
         }
         FileSupport.writeUtf8(excerpt, body.toString());
+        progress.step("日志倒查完成：" + r.summary);
         report.getTimeline().add(new TimelineEvent(TimeSupport.nowIso(),
                 r.hits.isEmpty() ? "日志倒查：窗口内无命中" : "日志倒查：命中 " + r.hits.size() + " 处",
                 excerpt.getAbsolutePath()));
@@ -416,6 +447,7 @@ public class DiagnoseOrchestrator {
                 return null;
             }
         }
+        progress.step("开始对比 dump1 vs dump2…");
         HprofParser.HprofSummary sOld = null;
         HprofParser.HprofSummary sNew = null;
         if (older != null && JvmEvidenceLocator.looksUsableHprof(older)) {
@@ -435,6 +467,7 @@ public class DiagnoseOrchestrator {
             }
         }
         if (sOld == null && sNew == null) {
+            progress.step("堆对比跳过：两份 dump 均无法解析");
             return null;
         }
         List<String> prior = new ArrayList<String>();
@@ -443,6 +476,7 @@ public class DiagnoseOrchestrator {
         }
         HprofComparer.CompareResult cmp = hprofComparer.compare(sOld, sNew,
                 req.getConfig().getCompareTopN(), prior);
+        progress.step("堆对比完成：" + judgmentZh(cmp.judgment));
         try {
             File json = new File(new File(pack.getEvidenceDir(), "heap"), "compare-summary.json");
             FileSupport.writeUtf8(json, JsonSupport.mapper().writerWithDefaultPrettyPrinter()
@@ -463,6 +497,7 @@ public class DiagnoseOrchestrator {
         sec.setType("thread");
         boolean live = target.process != null && discovery.pidExists(target.process.getPid());
         if (pack.getThreadDump() == null) {
+            progress.step("分析线程 dump：缺少 thread dump");
             if (!live) {
                 sec.setStatus("failed");
                 sec.setConfidence(Confidence.NONE.wireName());
@@ -479,8 +514,14 @@ public class DiagnoseOrchestrator {
             report.getSections().add(sec);
             return null;
         }
+        progress.step("分析线程 dump " + pack.getThreadDump().getAbsolutePath());
         String text = FileSupport.readUtf8(pack.getThreadDump());
         DeadlockEngine.ThreadAnalysis ta = deadlockEngine.analyze(text);
+        if (ta.isDeadlockFound()) {
+            progress.step("发现死锁 " + ta.getDeadlockCount() + " 组");
+        } else {
+            progress.step("未发现死锁");
+        }
         report.getEvidence().add(new EvidenceItem("EV-TD", "thread_dump",
                 pack.getThreadDump().getAbsolutePath(), true,
                 ta.isDeadlockFound() ? "死锁检出" : "未发现死锁"));
@@ -766,6 +807,7 @@ public class DiagnoseOrchestrator {
     }
 
     private DiagnoseResult write(DiagnoseReport report, DiagnoseRequest req, ResolvedTarget target) {
+        progress.step("生成报告 …");
         File outDir = target.runDir;
         if (outDir == null) {
             outDir = req.getOutDir() != null ? req.getOutDir() : new File(target.evidenceDir, "reports");
@@ -845,6 +887,19 @@ public class DiagnoseOrchestrator {
     }
 
     private ResolvedTarget resolve(DiagnoseRequest req, ServiceRegistry registry) {
+        if (req.getPid() != null) {
+            progress.step("解析目标进程 pid=" + req.getPid());
+        } else if (req.getService() != null) {
+            progress.step("解析服务 " + req.getService());
+        } else if (req.getEvidenceDir() != null) {
+            progress.step("解析证据目录 " + req.getEvidenceDir().getAbsolutePath());
+        } else if (req.getHprof() != null) {
+            progress.step("解析离线 hprof " + req.getHprof().getAbsolutePath());
+        } else if (req.getThreadDump() != null) {
+            progress.step("解析离线 thread dump " + req.getThreadDump().getAbsolutePath());
+        } else {
+            progress.step("解析诊断目标");
+        }
         int n = 0;
         if (req.getPid() != null) {
             n++;
@@ -910,7 +965,15 @@ public class DiagnoseOrchestrator {
         t.runDir = RunLayout.prepareRunDir(req.getConfig(),
                 RunLayout.pidKey(t.pid, t.evidenceDir, req.getHprof(), req.getThreadDump()),
                 req.getOutDir());
+        progress.step("准备运行目录 " + t.runDir.getAbsolutePath());
         return t;
+    }
+
+    private String fileSizeSuffix(File f) {
+        if (!progress.isVerbose() || f == null || !f.isFile()) {
+            return "";
+        }
+        return "（" + f.length() + " bytes）";
     }
 
     private static String localHost() {

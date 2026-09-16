@@ -72,6 +72,10 @@ jfa analyze --hprof newer.hprof --hprof-prev older.hprof --type memory
 
 活体路径：dump1（复用已有可用 hprof，否则采集）→ 采样+日志倒查 → 等待 → dump2 → 本产品 diff。一次 `--confirm` 覆盖两次 dump。进程在等待中退出时保留 dump1 并按单快照分析。
 
+## 控制台进度
+
+`jfa diagnose` / `jfa analyze` **默认**在运行过程中向 **stderr** 打印 `[JFA]` 分步进度，对应真实步骤（解析目标与运行目录、日志倒查、jstat 采样、hprof 复用或采集、线程分析、`--compare-after` 等待与对比、写报告）。`--format json` 时 stdout 仍是纯 JSON。结束后仍打印报告绝对路径（`报告文件` / `JSON 报告`）。`--quiet` 只关闭中途步骤，不关闭最终路径。`--verbose` 可附加更细的路径/体积信息；主步骤无需 `--verbose`。
+
 ## 活体取证
 
 默认对 heap dump 先打印 STW、磁盘与服务影响说明，并要求输入 `y`/`n`。脚本与 CI 可传 `--confirm`（等同于回答 `y`）。thread dump 与诊断内短时 jstat 采样不走该危险确认。不依赖交易时段配置。GC/hprof 从不替代 thread dump。
